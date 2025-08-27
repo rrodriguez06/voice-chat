@@ -144,12 +144,12 @@ impl AudioRouter {
         for entry in self.user_buffers.iter() {
             let (user_id, ch_id) = entry.key();
             if *ch_id == channel_id && *user_id != from_user {
-                println!("🎯 AudioRouter: Found target user {} in channel {}", user_id, ch_id);
+                // println!("🎯 AudioRouter: Found target user {} in channel {}", user_id, ch_id);
                 packets_routed += 1;
                 
                 // Récupérer l'adresse de destination
                 if let Some(addr) = self.client_addresses.get(user_id) {
-                    println!("📤 AudioRouter: Routing to user {} at {}", user_id, addr.value());
+                    // println!("📤 AudioRouter: Routing to user {} at {}", user_id, addr.value());
                     destinations.push(*addr.value());
                 } else {
                     println!("⚠️ AudioRouter: No address found for user {} (not registered)", user_id);

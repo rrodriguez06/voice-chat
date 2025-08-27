@@ -274,8 +274,8 @@ impl AudioPlaybackManager {
             })
             .collect();
         
-        println!("🔊 UdpListener: Converted {} PCM bytes -> {} f32 samples", 
-            pcm_data.len(), samples.len());
+        // println!("🔊 UdpListener: Converted {} PCM bytes -> {} f32 samples", 
+        //     pcm_data.len(), samples.len());
         samples
     }
     
@@ -377,7 +377,7 @@ impl AudioPlaybackManager {
                 result = udp_socket.recv_from(&mut buf) => {
                     match result {
                         Ok((size, from)) => {
-                            println!("📡 UdpListener: Received {} bytes from {}", size, from);
+                            // println!("📡 UdpListener: Received {} bytes from {}", size, from);
                             if from.ip() == server_addr.ip() && from.port() == server_addr.port() {
                                 // Essayer de désérialiser le packet audio
                                 if let Ok(packet) = AudioPacket::from_bytes(&buf[..size]) {
@@ -387,11 +387,11 @@ impl AudioPlaybackManager {
                                         // En mode loopback, on reçoit notre propre audio
                                         let is_own_packet = packet.header.user_id == user_id;
                                         
-                                        println!("🔊 UdpListener: Received audio packet from user {} {} - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
-                                            packet.header.user_id, 
-                                            if is_own_packet { "(own)" } else { "(other)" },
-                                            packet.header.sequence, packet.payload.len(),
-                                            packet.header.sample_rate, packet.header.channels);
+                                        // println!("🔊 UdpListener: Received audio packet from user {} {} - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
+                                        //     packet.header.user_id, 
+                                        //     if is_own_packet { "(own)" } else { "(other)" },
+                                        //     packet.header.sequence, packet.payload.len(),
+                                        //     packet.header.sample_rate, packet.header.channels);
                                         
                                         // Convertir les bytes PCM en f32
                                         let audio_samples = Self::pcm_to_f32(&packet.payload);
@@ -432,8 +432,8 @@ impl AudioPlaybackManager {
         output_sample_rate: u32,
         output_channels: usize,
     ) -> Vec<f32> {
-        println!("🔄 Converting audio: {}Hz {}ch -> {}Hz {}ch", 
-            input_sample_rate, input_channels, output_sample_rate, output_channels);
+        // println!("🔄 Converting audio: {}Hz {}ch -> {}Hz {}ch", 
+        //     input_sample_rate, input_channels, output_sample_rate, output_channels);
 
         let input_len = input_samples.len();
         let input_channels = input_channels as usize;
@@ -443,8 +443,8 @@ impl AudioPlaybackManager {
             let ratio = output_sample_rate as f32 / input_sample_rate as f32;
             let new_len = (input_samples.len() as f32 * ratio) as usize;
             
-            println!("🔄 Resampling with ratio: {:.2} ({} -> {} samples)", 
-                ratio, input_samples.len(), new_len);
+            // println!("🔄 Resampling with ratio: {:.2} ({} -> {} samples)", 
+            //     ratio, input_samples.len(), new_len);
             
             if ratio > 1.0 {
                 // Upsampling: interpolation linéaire simple
@@ -482,7 +482,7 @@ impl AudioPlaybackManager {
         
         // Étape 2: Convertir le nombre de canaux
         let converted = if input_channels != output_channels {
-            println!("🔄 Converting channels: {} -> {}", input_channels, output_channels);
+            // println!("🔄 Converting channels: {} -> {}", input_channels, output_channels);
             
             let samples_per_input_frame = input_channels;
             let samples_per_output_frame = output_channels;
@@ -530,8 +530,8 @@ impl AudioPlaybackManager {
             resampled
         };
         
-        println!("🔄 Conversion complete: {} -> {} samples", 
-            input_len, converted.len());
+        // println!("🔄 Conversion complete: {} -> {} samples", 
+        //     input_len, converted.len());
         converted
     }
 
