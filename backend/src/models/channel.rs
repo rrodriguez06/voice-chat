@@ -107,6 +107,7 @@ pub struct JoinChannelRequest {
 #[derive(Debug, Deserialize)]
 pub struct HttpJoinChannelRequest {
     pub user_id: String,
+    pub udp_port: Option<u16>, // Port UDP sur lequel le client écoute
 }
 
 #[derive(Debug, Serialize)]

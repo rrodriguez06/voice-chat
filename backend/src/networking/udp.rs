@@ -244,10 +244,9 @@ impl UdpServer {
             }
 
             crate::audio::PacketType::Sync => {
-                // Répondre avec un packet de sync pour la latence
-                if let Err(e) = sender.send((packet, from_addr)).await {
-                    tracing::error!("Failed to send sync response: {}", e);
-                }
+                println!("💓 UdpServer: Received heartbeat from user {} in channel {} at {}", user_id, channel_id, from_addr);
+                // L'enregistrement client a déjà été fait avec router.register_client() plus haut
+                // Pas besoin de répondre pour un simple heartbeat d'enregistrement
             }
         }
 

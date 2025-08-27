@@ -158,6 +158,23 @@ impl AudioPacket {
         )
     }
 
+    /// Crée un packet de synchronisation/heartbeat
+    pub fn sync(
+        user_id: Uuid,
+        channel_id: Uuid,
+        sequence: u32,
+    ) -> Self {
+        Self::new(
+            PacketType::Sync,
+            user_id,
+            channel_id,
+            sequence,
+            Bytes::new(), // Pas de payload pour sync
+            48000, // Valeurs par défaut
+            2,
+        )
+    }
+
     /// Sérialise le packet en bytes (compatible backend)
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let header_bytes = self.header.to_bytes()?;
@@ -202,6 +219,8 @@ impl AudioUdpClient {
                 let sock = UdpSocket::bind("0.0.0.0:0").await
                     .context("Failed to bind UDP socket on any port")?;
                 println!("✅ AudioUdpClient: Bound to dynamic port {:?}", sock.local_addr()?);
+                println!("⚠️ WARNING: Backend will NOT be able to route audio back to this client!");
+                println!("⚠️ The backend expects audio clients on port 8083, but we're on {:?}", sock.local_addr()?);
                 sock
             }
         };
@@ -267,6 +286,17 @@ impl AudioUdpClient {
     /// Obtient le socket partagé pour utilisation par d'autres composants
     pub fn get_shared_socket(&self) -> Arc<UdpSocket> {
         Arc::clone(&self.socket)
+    }
+
+    /// Envoie un packet de synchronisation/heartbeat au serveur
+    pub async fn send_heartbeat(
+        &self,
+        user_id: Uuid,
+        channel_id: Uuid,
+    ) -> Result<()> {
+        let packet = AudioPacket::sync(user_id, channel_id, 0);
+        println!("💓 UdpClient: Sending heartbeat to register UDP address");
+        self.send_audio_packet(packet).await
     }
 
     /// Démarre l'écoute des packets entrants sur le même socket

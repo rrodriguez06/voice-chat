@@ -328,6 +328,14 @@ impl BackendManager {
             // Commencer l'audio si on a un client UDP configuré
             if let Some(udp_client) = self.get_udp_client() {
                 println!("🎤 Audio UDP client available, ready for streaming");
+                
+                // Envoyer un heartbeat pour enregistrer notre adresse UDP
+                println!("💓 Sending heartbeat to register UDP address...");
+                if let Err(e) = udp_client.send_heartbeat(user.id, channel_id).await {
+                    println!("⚠️ Failed to send heartbeat: {}", e);
+                } else {
+                    println!("✅ Heartbeat sent successfully");
+                }
             } else {
                 println!("⚠️ No UDP client configured, audio won't work");
             }
