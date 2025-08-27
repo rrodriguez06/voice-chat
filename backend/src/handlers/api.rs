@@ -185,6 +185,10 @@ impl ApiHandlers {
             Ok(_) => {
                 tracing::info!("✅ Successfully joined channel: {} for user: {}", channel_id, user_id);
                 
+                // Notify audio service that user joined the channel
+                tracing::info!("🎵 Adding user {} to audio routing for channel {}", user_id, channel_id);
+                handlers.audio_service.add_user_to_channel(user_id, channel_id);
+                
                 // Get updated channel info to log
                 if let Ok(channel) = handlers.channel_service.get_channel(&channel_id) {
                     tracing::info!("📊 Channel '{}' now has {} users", channel.name, channel.current_users.len());
@@ -217,6 +221,10 @@ impl ApiHandlers {
         match handlers.channel_service.leave_channel(&channel_id, &user_id) {
             Ok(_) => {
                 tracing::info!("✅ Successfully left channel: {} for user: {}", channel_id, user_id);
+                
+                // Notify audio service that user left the channel
+                tracing::info!("🎵 Removing user {} from audio routing for channel {}", user_id, channel_id);
+                handlers.audio_service.remove_user_from_channel(&user_id, &channel_id);
                 
                 // Get updated channel info to log
                 if let Ok(channel) = handlers.channel_service.get_channel(&channel_id) {

@@ -188,17 +188,23 @@ impl UdpServer {
                         tracing::error!("Failed to send loopback packet: {}", e);
                     }
                     return Ok(());
+                } else {
+                    println!("🔀 UdpServer: Normal mode - routing audio to other users in channel");
                 }
 
                 // Router vers les autres utilisateurs du channel
                 if router.receive_packet(packet.clone(), from_addr) {
                     let targets = router.route_to_channel(packet.clone());
                     
+                    println!("🎯 Routing audio to {} target(s): {:?}", targets.len(), targets);
+                    
                     // Envoyer aux clients cibles
                     for target_addr in targets {
                         // Envoyer le packet original à chaque destination
                         if let Err(e) = sender.send((packet.clone(), target_addr)).await {
                             tracing::error!("Failed to queue packet for {}: {}", target_addr, e);
+                        } else {
+                            println!("📤 Successfully queued audio packet for {}", target_addr);
                         }
                     }
                 }

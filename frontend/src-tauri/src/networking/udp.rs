@@ -189,7 +189,8 @@ impl Clone for AudioUdpClient {
 impl AudioUdpClient {
     /// Crée un nouveau client UDP audio
     pub async fn new(server_addr: SocketAddr) -> Result<Self> {
-        let socket = UdpSocket::bind("0.0.0.0:0").await
+        // Utiliser le port 8083 pour que le backend puisse nous renvoyer l'audio sur le même port
+        let socket = UdpSocket::bind("0.0.0.0:8083").await
             .context("Failed to bind UDP socket")?;
             
         Ok(Self {
