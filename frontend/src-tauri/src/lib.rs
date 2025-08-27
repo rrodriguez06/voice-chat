@@ -191,15 +191,12 @@ async fn join_channel(channel_id: String, state: State<'_, TauriAppState>) -> Re
             let _ = state.audio_playback_manager.set_device("default".to_string());
         }
         
-        // Adresse du serveur UDP (port 8082 par défaut)
-        let server_addr: std::net::SocketAddr = "127.0.0.1:8082".parse()
-            .map_err(|e| format!("Invalid server address: {}", e))?;
-        
         // Démarrer la lecture audio pour recevoir l'audio du channel
         // Utiliser le socket partagé du client UDP si disponible
         let udp_client_option = state.backend_manager.read().unwrap().get_udp_client();
         if let Some(udp_client) = udp_client_option {
             let shared_socket = udp_client.get_shared_socket();
+            let server_addr = udp_client.get_server_addr(); // Utiliser la même adresse que le client UDP
             if let Err(e) = state.audio_playback_manager.start_playback_with_shared_socket(server_addr, shared_socket).await {
                 println!("⚠️ Warning: Failed to start audio playback with shared socket: {}", e);
                 // Fallback vers la méthode normale
@@ -210,7 +207,9 @@ async fn join_channel(channel_id: String, state: State<'_, TauriAppState>) -> Re
                 println!("✅ Audio playback started successfully with shared socket");
             }
         } else {
-            // Pas de client UDP, utiliser la méthode normale
+            // Pas de client UDP, utiliser l'adresse par défaut locale
+            let server_addr: std::net::SocketAddr = "127.0.0.1:8082".parse()
+                .map_err(|e| format!("Invalid server address: {}", e))?;
             if let Err(e) = state.audio_playback_manager.start_playback(server_addr).await {
                 println!("⚠️ Warning: Failed to start audio playback: {}", e);
             } else {
@@ -322,12 +321,17 @@ async fn start_audio_playback(state: State<'_, TauriAppState>) -> Result<(), Str
     if let Some(user) = state.app_state.get_user() {
         state.audio_playback_manager.set_user(user.id);
         
-        // Adresse du serveur UDP (port 8082 par défaut)
-        let server_addr: std::net::SocketAddr = "127.0.0.1:8082".parse()
-            .map_err(|e| format!("Invalid server address: {}", e))?;
+        // Utiliser l'adresse du serveur UDP du client UDP si disponible
+        let udp_client_option = state.backend_manager.read().unwrap().get_udp_client();
+        let server_addr = if let Some(udp_client) = &udp_client_option {
+            udp_client.get_server_addr()
+        } else {
+            // Fallback vers l'adresse par défaut locale
+            "127.0.0.1:8082".parse()
+                .map_err(|e| format!("Invalid server address: {}", e))?
+        };
         
         // Utiliser le socket partagé du client UDP si disponible
-        let udp_client_option = state.backend_manager.read().unwrap().get_udp_client();
         if let Some(udp_client) = udp_client_option {
             let shared_socket = udp_client.get_shared_socket();
             state.audio_playback_manager.start_playback_with_shared_socket(server_addr, shared_socket).await

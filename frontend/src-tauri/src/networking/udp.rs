@@ -288,6 +288,11 @@ impl AudioUdpClient {
         Arc::clone(&self.socket)
     }
 
+    /// Obtient l'adresse du serveur UDP
+    pub fn get_server_addr(&self) -> SocketAddr {
+        self.server_addr
+    }
+
     /// Envoie un packet de synchronisation/heartbeat au serveur
     pub async fn send_heartbeat(
         &self,
