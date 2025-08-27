@@ -17,7 +17,28 @@ class VoiceChatApp {
         inputDevice: null,
         outputDevice: null,
         inputLevel: 0.8,
-        outputLevel: 0.8,
+        async handleChannelUpdated(eventData) {
+    console.log('🔄 Channel updated event received:', eventData);
+    
+    // Toujours rafraîchir la liste des channels pour mettre à jour les comptes d'utilisateurs
+    console.log('📡 Refreshing channels list to update user counts...');
+    await this.refreshChannelsList();
+    
+    // Si on est dans le channel qui a été mis à jour, on recharge aussi ses informations
+    if (this.appState.currentChannel && eventData.channelId === this.appState.currentChannel.id) {
+      console.log('📡 Also refreshing current channel data...');
+      
+      const mainPage = this.pages.get('main');
+      if (mainPage && mainPage.refreshChannelData) {
+        await mainPage.refreshChannelData();
+        console.log('✅ Current channel data refreshed successfully');
+      } else {
+        console.log('ℹ️ Main page not available or no refresh method');
+      }
+    } else {
+      console.log('ℹ️ Event not for current channel, but channels list updated');
+    }
+  },
         micEnabled: true,
         speakerEnabled: true
       },
@@ -398,6 +419,10 @@ class VoiceChatApp {
         this.appState.currentChannel = null;
         this.showNotification(`Left ${channelName}`, 'info');
         
+        // Refresh channels list to update user counts
+        console.log('🔄 Refreshing channels list after leaving channel...');
+        await this.refreshChannelsList();
+        
         // Update main page
         const mainPage = this.pages.get('main');
         if (mainPage) {
@@ -735,6 +760,19 @@ class VoiceChatApp {
       console.log('✅ Channels refresh completed');
     } catch (error) {
       console.error('❌ Failed to refresh channels:', error);
+    }
+  }
+
+  /**
+   * Handle refresh channels request
+   */
+  async handleRefreshChannels() {
+    try {
+      console.log('🔄 Handling refresh channels request...');
+      await this.refreshChannelsList();
+      console.log('✅ Channels refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to handle refresh channels:', error);
     }
   }
 
