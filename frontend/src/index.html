@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice Chat</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="components/pages.css" />
+    
+    <!-- Preload fonts and icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Meta tags for better SEO and PWA support -->
+    <meta name="description" content="Voice Chat - Real-time voice communication application">
+    <meta name="theme-color" content="#5865f2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Voice Chat">
+    
+    <script type="module" src="app.js" defer></script>
+  </head>
+
+  <body>
+    <!-- Main App Container -->
+    <div id="app">
+      <!-- Loading Screen -->
+      <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+          <div class="loading-spinner"></div>
+          <h2>Voice Chat</h2>
+          <p>Initializing application...</p>
+        </div>
+      </div>
+      
+      <!-- Page Container (populated by JS) -->
+      <div id="page-container" class="page-container" style="display: none;">
+        <!-- Pages will be dynamically inserted here -->
+      </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container" class="notification-container"></div>
+  </body>
+</html>

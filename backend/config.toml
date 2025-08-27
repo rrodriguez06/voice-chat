@@ -1,0 +1,21 @@
+# Voice Chat Backend Configuration
+
+# Server configuration
+[server]
+host = "0.0.0.0"
+http_port = 8080
+websocket_port = 8081
+udp_port = 8082
+
+# Audio configuration
+[audio]
+sample_rate = 48000
+channels = 1
+buffer_size = 1024
+max_packet_size = 1400
+
+# Limits configuration
+[limits]
+max_users_per_channel = 10
+max_channels = 50
+max_concurrent_connections = 100

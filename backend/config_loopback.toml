@@ -1,0 +1,22 @@
+# Configuration de test avec mode loopback audio activé
+
+[server]
+host = "0.0.0.0"
+http_port = 8080
+websocket_port = 8081
+udp_port = 8082
+
+[audio]
+sample_rate = 48000
+channels = 1
+buffer_size = 1024
+max_packet_size = 1400
+# Mode de test: renvoie l'audio à l'expéditeur
+loopback_mode = true
+# Mode de test: simule un second utilisateur virtuel (pas encore implémenté)
+virtual_user_mode = false
+
+[limits]
+max_users_per_channel = 10
+max_channels = 50
+max_concurrent_connections = 100

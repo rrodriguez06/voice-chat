@@ -1,0 +1,59 @@
+[package]
+name = "voice-chat-backend"
+version = "0.1.0"
+edition = "2021"
+authors = ["Voice Chat Team"]
+description = "Backend server for voice chat application"
+
+[[bin]]
+name = "voice_chat_backend"
+path = "src/main.rs"
+
+[[bin]]
+name = "load_test_simple"
+path = "src/bin/load_test_simple.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+tokio-tungstenite = "0.23"
+
+# Web framework and HTTP
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+
+# UUID for unique IDs
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+config = "0.14"
+
+# Networking
+futures-util = "0.3"
+bytes = "1.7"
+
+# Audio processing (for future use)
+dasp = "0.11"
+
+# Collections
+dashmap = "6.0"
+
+# Performance and system metrics
+num_cpus = "1.0"
+
+# Testing
+axum-test = "15.0"
