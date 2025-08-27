@@ -17,28 +17,6 @@ class VoiceChatApp {
         inputDevice: null,
         outputDevice: null,
         inputLevel: 0.8,
-        async handleChannelUpdated(eventData) {
-    console.log('🔄 Channel updated event received:', eventData);
-    
-    // Toujours rafraîchir la liste des channels pour mettre à jour les comptes d'utilisateurs
-    console.log('📡 Refreshing channels list to update user counts...');
-    await this.refreshChannelsList();
-    
-    // Si on est dans le channel qui a été mis à jour, on recharge aussi ses informations
-    if (this.appState.currentChannel && eventData.channelId === this.appState.currentChannel.id) {
-      console.log('📡 Also refreshing current channel data...');
-      
-      const mainPage = this.pages.get('main');
-      if (mainPage && mainPage.refreshChannelData) {
-        await mainPage.refreshChannelData();
-        console.log('✅ Current channel data refreshed successfully');
-      } else {
-        console.log('ℹ️ Main page not available or no refresh method');
-      }
-    } else {
-      console.log('ℹ️ Event not for current channel, but channels list updated');
-    }
-  },
         micEnabled: true,
         speakerEnabled: true
       },
@@ -49,6 +27,46 @@ class VoiceChatApp {
     this.eventListeners = new Map();
     
     this.initialize();
+  }
+
+  // Méthode pour gérer les événements de mise à jour des channels
+  async handleChannelUpdated(eventData) {
+    console.log('🔄 Channel updated event received:', eventData);
+    console.log('🔄 [DEBUG] handleChannelUpdated called with:', JSON.stringify(eventData, null, 2));
+    
+    // Adapter les noms de propriétés du backend (snake_case) vers frontend (camelCase)
+    const channelId = eventData.channel_id || eventData.channelId;
+    const userId = eventData.user_id || eventData.userId;
+    
+    console.log(`📊 Event details - Channel: ${channelId}, User: ${userId}`);
+    console.log('� [DEBUG] Current channel:', this.appState.currentChannel);
+    console.log('🔍 [DEBUG] Current channel ID:', this.appState.currentChannel?.id);
+    console.log('🔍 [DEBUG] Event channel ID:', channelId);
+    console.log('🔍 [DEBUG] IDs match?', this.appState.currentChannel?.id === channelId);
+    console.log('�🔄 [DEBUG] About to call refreshChannelsList...');
+    
+    // Toujours rafraîchir la liste des channels pour mettre à jour les comptes d'utilisateurs
+    console.log('📡 Refreshing channels list to update user counts...');
+    await this.refreshChannelsList();
+    console.log('✅ [DEBUG] refreshChannelsList completed');
+    
+    // Si on est dans le channel qui a été mis à jour, on recharge aussi ses informations
+    if (this.appState.currentChannel && channelId === this.appState.currentChannel.id) {
+      console.log('📡 Also refreshing current channel data...');
+      
+      const mainPage = this.pages.get('main');
+      if (mainPage && mainPage.refreshChannelData) {
+        console.log('🔄 [DEBUG] Calling refreshChannelData...');
+        await mainPage.refreshChannelData();
+        console.log('✅ Current channel data refreshed successfully');
+      } else {
+        console.log('ℹ️ Main page not available or no refresh method');
+      }
+    } else {
+      console.log('ℹ️ Event not for current channel, but channels list updated');
+    }
+    
+    console.log('✅ [DEBUG] handleChannelUpdated completed');
   }
 
   /**
@@ -184,11 +202,13 @@ class VoiceChatApp {
 
         await listen('user-joined', (event) => {
           console.log('📡 Event: user-joined', event.payload);
+          console.log('🔄 Calling handleChannelUpdated from user-joined event');
           this.handleChannelUpdated(event.payload);
         });
 
         await listen('user-left', (event) => {
           console.log('📡 Event: user-left', event.payload);
+          console.log('🔄 Calling handleChannelUpdated from user-left event');
           this.handleChannelUpdated(event.payload);
         });
 
@@ -484,24 +504,24 @@ class VoiceChatApp {
   /**
    * Handle channel updated event (generic handler for user join/leave)
    */
-  async handleChannelUpdated(eventData) {
-    console.log('🔄 Channel updated event received:', eventData);
+  // async handleChannelUpdated(eventData) {
+  //   console.log('🔄 Channel updated event received:', eventData);
     
-    // Si on est dans le channel qui a été mis à jour, on recharge ses informations
-    if (this.appState.currentChannel && eventData.channelId === this.appState.currentChannel.id) {
-      console.log('� Refreshing channel data from API...');
+  //   // Si on est dans le channel qui a été mis à jour, on recharge ses informations
+  //   if (this.appState.currentChannel && eventData.channelId === this.appState.currentChannel.id) {
+  //     console.log('� Refreshing channel data from API...');
       
-      const mainPage = this.pages.get('main');
-      if (mainPage && mainPage.refreshChannelData) {
-        await mainPage.refreshChannelData();
-        console.log('✅ Channel data refreshed successfully');
-      } else {
-        console.log('ℹ️ Main page not available or no refresh method');
-      }
-    } else {
-      console.log('ℹ️ Event not for current channel, ignoring');
-    }
-  }
+  //     const mainPage = this.pages.get('main');
+  //     if (mainPage && mainPage.refreshChannelData) {
+  //       await mainPage.refreshChannelData();
+  //       console.log('✅ Channel data refreshed successfully');
+  //     } else {
+  //       console.log('ℹ️ Main page not available or no refresh method');
+  //     }
+  //   } else {
+  //     console.log('ℹ️ Event not for current channel, ignoring');
+  //   }
+  // }
 
   /**
    * Handle channel users list
@@ -796,7 +816,11 @@ class VoiceChatApp {
         // Update main page channels list
         const mainPage = this.pages.get('main');
         if (mainPage) {
+          console.log('🔄 [DEBUG] Calling mainPage.updateChannels with', result.channels.length, 'channels');
           mainPage.updateChannels(this.appState.channels);
+          console.log('✅ [DEBUG] mainPage.updateChannels completed');
+        } else {
+          console.log('⚠️ [DEBUG] No main page found to update');
         }
       } else {
         console.error('❌ Failed to get channels:', result.error);

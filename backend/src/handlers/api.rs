@@ -193,12 +193,12 @@ impl ApiHandlers {
                 tracing::info!("🎵 Adding user {} to audio routing for channel {}", user_id, channel_id);
                 handlers.audio_service.add_user_to_channel(user_id, channel_id);
                 
-                // Broadcast WebSocket event to other users in the channel
-                tracing::info!("📡 Broadcasting user joined event via WebSocket");
-                if let Err(e) = handlers.websocket_handler.broadcast_to_channel(
-                    channel_id,
+                // Broadcast WebSocket event to ALL connected users (not just those in the channel)
+                // This allows all clients to update their channel list with new user counts
+                tracing::info!("📡 Broadcasting user joined event to all connected users");
+                if let Err(e) = handlers.websocket_handler.broadcast_to_all(
                     ServerMessage::UserJoined { channel_id, user_id },
-                    Some(user_id) // Exclude the user who just joined
+                    None // Don't exclude anyone - everyone should know about channel updates
                 ).await {
                     tracing::warn!("⚠️ Failed to broadcast user joined event: {}", e);
                 }
@@ -240,12 +240,12 @@ impl ApiHandlers {
                 tracing::info!("🎵 Removing user {} from audio routing for channel {}", user_id, channel_id);
                 handlers.audio_service.remove_user_from_channel(&user_id, &channel_id);
                 
-                // Broadcast WebSocket event to other users in the channel
-                tracing::info!("📡 Broadcasting user left event via WebSocket");
-                if let Err(e) = handlers.websocket_handler.broadcast_to_channel(
-                    channel_id,
+                // Broadcast WebSocket event to ALL connected users (not just those in the channel)
+                // This allows all clients to update their channel list with new user counts
+                tracing::info!("📡 Broadcasting user left event to all connected users");
+                if let Err(e) = handlers.websocket_handler.broadcast_to_all(
                     ServerMessage::UserLeft { channel_id, user_id },
-                    Some(user_id) // Exclude the user who just left
+                    None // Don't exclude anyone - everyone should know about channel updates
                 ).await {
                     tracing::warn!("⚠️ Failed to broadcast user left event: {}", e);
                 }

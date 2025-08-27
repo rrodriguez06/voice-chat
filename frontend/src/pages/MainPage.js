@@ -459,7 +459,25 @@ export default class MainPage {
       const refreshEvent = new CustomEvent('app:refresh-channels');
       document.dispatchEvent(refreshEvent);
       
-      console.log('✅ Channel data refresh requested');
+      // Attendre un peu pour que les données soient rafraîchies
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Récupérer les données mises à jour du channel courant
+      const appState = this.app.getState();
+      const updatedChannel = appState.channels.find(ch => ch.id === this.currentChannel.id);
+      
+      if (updatedChannel) {
+        console.log('🔄 [DEBUG] Updated channel data:', updatedChannel);
+        console.log('🔄 [DEBUG] Updated users list:', updatedChannel.users);
+        
+        // Mettre à jour l'affichage avec les nouvelles données
+        this.updateChannel(updatedChannel);
+        console.log('✅ Channel display updated with fresh data');
+      } else {
+        console.log('⚠️ Could not find updated channel data');
+      }
+      
+      console.log('✅ Channel data refresh completed');
     } catch (error) {
       console.error('❌ Failed to refresh channel data:', error);
     }

@@ -66,11 +66,8 @@ impl WebSocketManager {
                                         println!("📩 Received WebSocket message: {}", text);
                                         
                                         if let Ok(ws_message) = serde_json::from_str::<WebSocketMessage>(&text) {
-                                            if let Err(e) = app_handle_clone.emit("websocket-message", &ws_message) {
-                                                println!("❌ Failed to emit websocket message: {}", e);
-                                            } else {
-                                                println!("✅ Emitted websocket message to frontend");
-                                            }
+                                            // Traiter le message et émettre l'événement approprié
+                                            Self::handle_websocket_message(&app_handle_clone, ws_message).await;
                                         } else {
                                             println!("⚠️ Failed to parse WebSocket message as JSON");
                                         }
@@ -122,5 +119,61 @@ impl WebSocketManager {
         }
         
         Ok(())
+    }
+
+    async fn handle_websocket_message(app_handle: &AppHandle, message: WebSocketMessage) {
+        println!("🔄 Processing WebSocket message: {}", message.message_type);
+        
+        match message.message_type.as_str() {
+            "UserJoined" => {
+                println!("👤 User joined channel - triggering UI refresh");
+                if let Err(e) = app_handle.emit("user-joined", &message.data) {
+                    println!("❌ Failed to emit user-joined event: {}", e);
+                } else {
+                    println!("✅ Emitted user-joined event to frontend");
+                }
+            },
+            "UserLeft" => {
+                println!("👤 User left channel - triggering UI refresh");
+                if let Err(e) = app_handle.emit("user-left", &message.data) {
+                    println!("❌ Failed to emit user-left event: {}", e);
+                } else {
+                    println!("✅ Emitted user-left event to frontend");
+                }
+            },
+            "ChannelUsers" => {
+                println!("👥 Channel users updated - triggering UI refresh");
+                if let Err(e) = app_handle.emit("channel_users", &message.data) {
+                    println!("❌ Failed to emit channel_users event: {}", e);
+                } else {
+                    println!("✅ Emitted channel_users event to frontend");
+                }
+            },
+            "Authenticated" => {
+                println!("🔐 WebSocket authenticated successfully");
+                if let Err(e) = app_handle.emit("websocket-authenticated", &message.data) {
+                    println!("❌ Failed to emit websocket-authenticated event: {}", e);
+                } else {
+                    println!("✅ Emitted websocket-authenticated event to frontend");
+                }
+            },
+            "Error" => {
+                println!("❌ WebSocket error received");
+                if let Err(e) = app_handle.emit("websocket-error", &message.data) {
+                    println!("❌ Failed to emit websocket-error event: {}", e);
+                } else {
+                    println!("✅ Emitted websocket-error event to frontend");
+                }
+            },
+            _ => {
+                println!("📨 Unhandled WebSocket message type: {}", message.message_type);
+                // Émettre l'événement générique pour les types non gérés
+                if let Err(e) = app_handle.emit("websocket-message", &message) {
+                    println!("❌ Failed to emit generic websocket-message: {}", e);
+                } else {
+                    println!("✅ Emitted generic websocket-message to frontend");
+                }
+            }
+        }
     }
 }

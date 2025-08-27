@@ -159,11 +159,11 @@ impl WebSocketHandler {
                 // Update user's current channel
                 self.user_service.user_join_channel(&uid, channel_id)?;
 
-                // Notify other users in channel
-                self.broadcast_to_channel(
-                    channel_id,
+                // Notify ALL connected users (not just those in channel)
+                // This allows all clients to update their channel list
+                self.broadcast_to_all(
                     ServerMessage::UserJoined { channel_id, user_id: uid },
-                    Some(uid)
+                    None
                 ).await?;
 
                 // Send current user list to the new user
@@ -181,11 +181,11 @@ impl WebSocketHandler {
                 self.channel_service.leave_channel(&channel_id, &uid)?;
                 self.user_service.user_leave_channel(&uid)?;
 
-                // Notify other users
-                self.broadcast_to_channel(
-                    channel_id,
+                // Notify ALL connected users (not just those in channel)
+                // This allows all clients to update their channel list
+                self.broadcast_to_all(
                     ServerMessage::UserLeft { channel_id, user_id: uid },
-                    Some(uid)
+                    None
                 ).await?;
 
                 tracing::info!("User {} left channel {}", uid, channel_id);
@@ -262,6 +262,30 @@ impl WebSocketHandler {
                     let _ = sender.send(message.clone());
                 } else {
                     tracing::warn!("No connection found for user {} in channel {}", user_id, channel_id);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Broadcast a message to all connected users
+    pub async fn broadcast_to_all(
+        &self,
+        message: ServerMessage,
+        exclude_user: Option<Uuid>,
+    ) -> Result<()> {
+        let connected_users: Vec<Uuid> = self.connections.iter().map(|entry| *entry.key()).collect();
+        
+        tracing::debug!("Broadcasting to all connected users: {:?} to {} users", message, connected_users.len());
+        
+        for user_id in connected_users {
+            if Some(user_id) != exclude_user {
+                if let Some(sender) = self.connections.get(&user_id) {
+                    tracing::debug!("Sending broadcast message to user {}", user_id);
+                    let _ = sender.send(message.clone());
+                } else {
+                    tracing::warn!("No connection found for user {}", user_id);
                 }
             }
         }
