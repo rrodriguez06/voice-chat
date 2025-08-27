@@ -377,6 +377,7 @@ impl AudioPlaybackManager {
                 result = udp_socket.recv_from(&mut buf) => {
                     match result {
                         Ok((size, from)) => {
+                            println!("📡 UdpListener: Received {} bytes from {}", size, from);
                             if from.ip() == server_addr.ip() && from.port() == server_addr.port() {
                                 // Essayer de désérialiser le packet audio
                                 if let Ok(packet) = AudioPacket::from_bytes(&buf[..size]) {
@@ -403,7 +404,11 @@ impl AudioPlaybackManager {
                                     } else {
                                         println!("🔇 UdpListener: Ignoring non-audio packet type: {:?}", packet.header.packet_type);
                                     }
+                                } else {
+                                    println!("❌ UdpListener: Failed to parse packet from {}", from);
                                 }
+                            } else {
+                                println!("🚫 UdpListener: Ignoring packet from {} (expecting {}:{})", from, server_addr.ip(), server_addr.port());
                             }
                         }
                         Err(e) => {

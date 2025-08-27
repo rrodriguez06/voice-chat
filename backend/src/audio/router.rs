@@ -82,7 +82,10 @@ impl AudioRouter {
 
     /// Enregistre l'adresse d'un client
     pub fn register_client(&self, user_id: Uuid, address: SocketAddr) {
+        println!("📍 AudioRouter: Registering client {} at address {}", user_id, address);
         self.client_addresses.insert(user_id, address);
+        println!("📍 AudioRouter: Client {} registered successfully. Total clients: {}", 
+            user_id, self.client_addresses.len());
     }
 
     /// Supprime un client
@@ -130,22 +133,34 @@ impl AudioRouter {
 
     /// Route un packet audio vers les autres utilisateurs du channel
     pub fn route_packet(&self, packet: &AudioPacket, from_user: Uuid, channel_id: Uuid) -> Vec<SocketAddr> {
+        println!("🔀 AudioRouter: Routing packet from user {} in channel {}", from_user, channel_id);
+        
         let mut destinations = Vec::new();
         let packets_received = 1_u64;
         let mut packets_routed = 0_u64;
 
         // Trouver tous les utilisateurs du channel (sauf l'expéditeur)
+        println!("🔀 AudioRouter: Searching for users in channel {}", channel_id);
         for entry in self.user_buffers.iter() {
             let (user_id, ch_id) = entry.key();
             if *ch_id == channel_id && *user_id != from_user {
+                println!("🎯 AudioRouter: Found target user {} in channel {}", user_id, ch_id);
                 packets_routed += 1;
                 
                 // Récupérer l'adresse de destination
                 if let Some(addr) = self.client_addresses.get(user_id) {
+                    println!("📤 AudioRouter: Routing to user {} at {}", user_id, addr.value());
                     destinations.push(*addr.value());
+                } else {
+                    println!("⚠️ AudioRouter: No address found for user {} (not registered)", user_id);
                 }
+            } else if *ch_id == channel_id {
+                println!("📤 AudioRouter: Skipping sender {} (same as source)", user_id);
             }
         }
+        
+        println!("🔀 AudioRouter: Routing summary - Found {} destinations for {} users", 
+            destinations.len(), packets_routed);
 
         // Mettre à jour les statistiques
         if let Some(mut stats) = self.stats.get_mut(&channel_id) {
