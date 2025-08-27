@@ -2,6 +2,7 @@ use anyhow::{Result, Context};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::UdpSocket;
 use uuid::Uuid;
 
@@ -170,17 +171,15 @@ impl AudioPacket {
 /// Client UDP pour l'audio
 #[derive(Debug)]
 pub struct AudioUdpClient {
-    socket: UdpSocket,
+    socket: Arc<UdpSocket>,
     server_addr: SocketAddr,
     sequence: std::sync::atomic::AtomicU32,
 }
 
 impl Clone for AudioUdpClient {
     fn clone(&self) -> Self {
-        // Créer un nouveau socket (impossible de cloner UdpSocket directement)
-        // On va retourner une version simplifiée qui sera recréée à l'usage
         Self {
-            socket: UdpSocket::from_std(std::net::UdpSocket::bind("0.0.0.0:0").unwrap()).unwrap(),
+            socket: Arc::clone(&self.socket),
             server_addr: self.server_addr,
             sequence: std::sync::atomic::AtomicU32::new(0),
         }
@@ -194,7 +193,7 @@ impl AudioUdpClient {
             .context("Failed to bind UDP socket")?;
             
         Ok(Self {
-            socket,
+            socket: Arc::new(socket),
             server_addr,
             sequence: std::sync::atomic::AtomicU32::new(0),
         })
