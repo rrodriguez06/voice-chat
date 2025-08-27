@@ -82,10 +82,10 @@ impl AudioRouter {
 
     /// Enregistre l'adresse d'un client
     pub fn register_client(&self, user_id: Uuid, address: SocketAddr) {
-        println!("📍 AudioRouter: Registering client {} at address {}", user_id, address);
+        // println!("📍 AudioRouter: Registering client {} at address {}", user_id, address);
         self.client_addresses.insert(user_id, address);
-        println!("📍 AudioRouter: Client {} registered successfully. Total clients: {}", 
-            user_id, self.client_addresses.len());
+        // println!("📍 AudioRouter: Client {} registered successfully. Total clients: {}", 
+        //     user_id, self.client_addresses.len());
     }
 
     /// Supprime un client
@@ -133,7 +133,7 @@ impl AudioRouter {
 
     /// Route un packet audio vers les autres utilisateurs du channel
     pub fn route_packet(&self, packet: &AudioPacket, from_user: Uuid, channel_id: Uuid) -> Vec<SocketAddr> {
-        println!("🔀 AudioRouter: Routing packet from user {} in channel {}", from_user, channel_id);
+        // println!("🔀 AudioRouter: Routing packet from user {} in channel {}", from_user, channel_id);
         
         let mut destinations = Vec::new();
         let packets_received = 1_u64;

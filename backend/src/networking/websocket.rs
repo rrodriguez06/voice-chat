@@ -215,7 +215,7 @@ impl WebSocketHandler {
         Ok(())
     }
 
-    async fn broadcast_to_channel(
+    pub async fn broadcast_to_channel(
         &self,
         channel_id: Uuid,
         message: ServerMessage,

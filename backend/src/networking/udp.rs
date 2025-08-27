@@ -130,7 +130,7 @@ impl UdpServer {
         sender: &mpsc::Sender<(AudioPacket, SocketAddr)>,
     ) -> Result<()> {
         // Log de réception
-        println!("🎵 UdpServer: Received {} bytes from {}", packet_data.len(), from_addr);
+                // println!("📦 UDP received {} bytes from {}", len, addr);
         
         // Désérialiser le packet
         let packet = match AudioPacket::from_bytes(packet_data) {
@@ -196,7 +196,7 @@ impl UdpServer {
                 if router.receive_packet(packet.clone(), from_addr) {
                     let targets = router.route_to_channel(packet.clone());
                     
-                    println!("🎯 Routing audio to {} target(s): {:?}", targets.len(), targets);
+                    // println!("🎯 Routing audio to {} target(s): {:?}", targets.len(), targets);
                     
                     // Envoyer aux clients cibles
                     for target_addr in targets {
@@ -204,7 +204,7 @@ impl UdpServer {
                         if let Err(e) = sender.send((packet.clone(), target_addr)).await {
                             tracing::error!("Failed to queue packet for {}: {}", target_addr, e);
                         } else {
-                            println!("📤 Successfully queued audio packet for {}", target_addr);
+                                                // println!("📤 Sent audio to {} at {}", target_user, target_addr);
                         }
                     }
                 }

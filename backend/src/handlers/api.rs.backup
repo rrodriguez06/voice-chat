@@ -7,7 +7,41 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    models::{CreateUserRequest, UserResponse, CreateChannelRequest, ChannelResponse, DetailedChannelResponse, EnrichedChannelResponse, AudioStatsResponse, AudioConfigResponse, JoinChannelRequest, HttpJoinChannelRequest, ServerMessage},
+    models::{CreateUserRequest, UserResponse, CreateChann                // Notify audio service that user joined the channel
+                tracing::info!("🎵 Adding user {} to audio routing for channel {}", user_id, channel_id);
+                handlers.audio_service.add_user_to_channel(user_id, channel_id);
+                
+                // Broadcast WebSocket event to other users in the channel
+                tracing::info!("📡 Broadcasting user joined event via WebSocket");
+                if let Err(e) = handlers.websocket_handler.broadcast_to_channel(
+                    channel_id,
+                    ServerMessage::UserJoined { channel_id, user_id },
+                    Some(user_id) // Exclude the user who just joined
+                ).await {
+                    tracing::warn!("⚠️ Failed to broadcast user joined event: {}", e);
+                }
+                
+                // Get updated channel info to log
+                if let Ok(channel) = handlers.channel_service.get_channel(&channel_id) {
+                    tracing::info!("📈 Channel '{}' now has {} users", channel.name, channel.current_users.len());
+                }t, ChannelResponse, DetailedC                // Notify audio service that user left the channel
+                tracing::info!("🎵 Removing user {} from audio routing for channel {}", user_id, channel_id);
+                handlers.audio_service.remove_user_from_channel(&user_id, &channel_id);
+                
+                // Broadcast WebSocket event to other users in the channel
+                tracing::info!("📡 Broadcasting user left event via WebSocket");
+                if let Err(e) = handlers.websocket_handler.broadcast_to_channel(
+                    channel_id,
+                    ServerMessage::UserLeft { channel_id, user_id },
+                    Some(user_id) // Exclude the user who just left
+                ).await {
+                    tracing::warn!("⚠️ Failed to broadcast user left event: {}", e);
+                }
+                
+                // Get updated channel info to log
+                if let Ok(channel) = handlers.channel_service.get_channel(&channel_id) {
+                    tracing::info!("📈 Channel '{}' now has {} users", channel.name, channel.current_users.len());
+                }sponse, EnrichedChannelResponse, AudioStatsResponse, AudioConfigResponse, JoinChannelRequest, HttpJoinChannelRequest, ServerMessage},
     services::{UserService, ChannelService, AudioService},
     networking::WebSocketHandler,
 };
@@ -193,16 +227,6 @@ impl ApiHandlers {
                 tracing::info!("🎵 Adding user {} to audio routing for channel {}", user_id, channel_id);
                 handlers.audio_service.add_user_to_channel(user_id, channel_id);
                 
-                // Broadcast WebSocket event to other users in the channel
-                tracing::info!("📡 Broadcasting user joined event via WebSocket");
-                if let Err(e) = handlers.websocket_handler.broadcast_to_channel(
-                    channel_id,
-                    ServerMessage::UserJoined { channel_id, user_id },
-                    Some(user_id) // Exclude the user who just joined
-                ).await {
-                    tracing::warn!("⚠️ Failed to broadcast user joined event: {}", e);
-                }
-                
                 // Get updated channel info to log
                 if let Ok(channel) = handlers.channel_service.get_channel(&channel_id) {
                     tracing::info!("📊 Channel '{}' now has {} users", channel.name, channel.current_users.len());
@@ -239,16 +263,6 @@ impl ApiHandlers {
                 // Notify audio service that user left the channel
                 tracing::info!("🎵 Removing user {} from audio routing for channel {}", user_id, channel_id);
                 handlers.audio_service.remove_user_from_channel(&user_id, &channel_id);
-                
-                // Broadcast WebSocket event to other users in the channel
-                tracing::info!("📡 Broadcasting user left event via WebSocket");
-                if let Err(e) = handlers.websocket_handler.broadcast_to_channel(
-                    channel_id,
-                    ServerMessage::UserLeft { channel_id, user_id },
-                    Some(user_id) // Exclude the user who just left
-                ).await {
-                    tracing::warn!("⚠️ Failed to broadcast user left event: {}", e);
-                }
                 
                 // Get updated channel info to log
                 if let Ok(channel) = handlers.channel_service.get_channel(&channel_id) {

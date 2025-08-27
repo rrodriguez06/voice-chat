@@ -140,15 +140,15 @@ impl AudioCaptureManager {
             };
 
             if let Some(device) = device {
-                println!("🎤 CaptureThread: Found audio device: {:?}", device.name());
+                // println!("🎤 CaptureThread: Found audio device: {:?}", device.name());
                 
                 // Configuration du stream
                 if let Ok(config) = device.default_input_config() {
                     let sample_rate = config.sample_rate().0;
                     let channels = config.channels() as u8;
-                    println!("🎤 CaptureThread: Audio config - Sample rate: {}, Channels: {}", sample_rate, channels);
+                    // println!("🎤 CaptureThread: Audio config - Sample rate: {}, Channels: {}", sample_rate, channels);
 
-                    println!("🎤 CaptureThread: Creating audio stream with format: {:?}", config.sample_format());
+                    // println!("🎤 CaptureThread: Creating audio stream with format: {:?}", config.sample_format());
                     
                     // Créer le stream selon le format
                     let stream_result = match config.sample_format() {
@@ -209,7 +209,7 @@ impl AudioCaptureManager {
                 audio_data = audio_rx.recv() => {
                     if let Some((data, sample_rate, channels)) = audio_data {
                         if *is_recording_stream.read() {
-                            println!("🎤 Sending {} samples to UDP (SR: {}Hz, CH: {})", data.len(), sample_rate, channels);
+                            // println!("🎤 Sending {} samples to UDP (SR: {}Hz, CH: {})", data.len(), sample_rate, channels);
                             if let Err(e) = udp_client.send_audio_data(
                                 user_id,
                                 channel_id,

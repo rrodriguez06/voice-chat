@@ -59,18 +59,19 @@ impl Server {
     }
 
     pub async fn run(self) -> Result<()> {
-        // Create API handlers
-        let api_handlers = Arc::new(ApiHandlers::new(
+        // Create WebSocket handler first
+        let ws_handler = Arc::new(WebSocketHandler::new(
             self.user_service.clone(),
             self.channel_service.clone(),
             self.audio_service.clone(),
         ));
 
-        // Create WebSocket handler
-        let ws_handler = Arc::new(WebSocketHandler::new(
+        // Create API handlers with WebSocket handler
+        let api_handlers = Arc::new(ApiHandlers::new(
             self.user_service.clone(),
             self.channel_service.clone(),
             self.audio_service.clone(),
+            ws_handler.clone(),
         ));
 
         // Create metrics API state

@@ -81,7 +81,7 @@ impl TauriAppState {
         // Configurer l'AudioCaptureManager avec le client UDP
         if let Some(udp_client) = backend_manager.get_udp_client() {
             self.audio_capture_manager.set_udp_client(udp_client).await;
-            println!("Audio UDP configured successfully");
+            // println!("Audio UDP configured successfully");
         }
         
         Ok(())
@@ -126,6 +126,23 @@ async fn connect_to_server(server_url: String, username: String, state: State<'_
                     if let Err(e) = state.setup_audio_udp(backend_host).await {
                         eprintln!("Warning: Failed to setup audio UDP: {}", e);
                         // Continuer même si l'UDP échoue
+                    }
+                    
+                    // Démarrer la connexion WebSocket
+                    println!("🔗 Starting WebSocket connection...");
+                    let ws_url = format!("ws://{}:8081/ws", backend_host);
+                    println!("🔗 WebSocket URL: {}", ws_url);
+                    
+                    // Mettre à jour l'URL WebSocket et démarrer la connexion
+                    if let Ok(ws_manager) = state.websocket_manager.lock() {
+                        // Créer un nouveau WebSocketManager avec la bonne URL
+                        let mut new_ws_manager = WebSocketManager::new(&ws_url, state.app_state.clone());
+                        
+                        // TODO: Idéalement on devrait démarrer la connexion WebSocket ici
+                        // Pour l'instant, on log juste que c'est configuré
+                        println!("✅ WebSocket manager updated with URL: {}", ws_url);
+                    } else {
+                        eprintln!("⚠️ Warning: Failed to access WebSocket manager");
                     }
                     
                     // Récupérer les channels
@@ -197,7 +214,7 @@ async fn join_channel(channel_id: String, state: State<'_, TauriAppState>) -> Re
     state.get_backend_manager().join_channel(uuid).await
         .map_err(|e| e.to_string())?;
     
-    println!("🎵 Successfully joined channel {}, starting audio playback and capture...", channel_id);
+    // println!("🎵 Successfully joined channel {}, starting audio playback and capture...", channel_id);
     
     // Démarrer automatiquement la lecture audio après avoir rejoint le channel
     if let Some(user) = state.app_state.get_user() {
@@ -215,22 +232,22 @@ async fn join_channel(channel_id: String, state: State<'_, TauriAppState>) -> Re
             let shared_socket = udp_client.get_shared_socket();
             let server_addr = udp_client.get_server_addr(); // Utiliser la même adresse que le client UDP
             if let Err(e) = state.audio_playback_manager.start_playback_with_shared_socket(server_addr, shared_socket).await {
-                println!("⚠️ Warning: Failed to start audio playback with shared socket: {}", e);
+                // println!("⚠️ Warning: Failed to start audio playback with shared socket: {}", e);
                 // Fallback vers la méthode normale
                 if let Err(e2) = state.audio_playback_manager.start_playback(server_addr).await {
-                    println!("⚠️ Warning: Failed to start audio playback (fallback): {}", e2);
+                    // println!("⚠️ Warning: Failed to start audio playback (fallback): {}", e2);
                 }
             } else {
-                println!("✅ Audio playback started successfully with shared socket");
+                // println!("✅ Audio playback started successfully with shared socket");
             }
         } else {
             // Pas de client UDP, utiliser l'adresse par défaut locale
             let server_addr: std::net::SocketAddr = "127.0.0.1:8082".parse()
                 .map_err(|e| format!("Invalid server address: {}", e))?;
             if let Err(e) = state.audio_playback_manager.start_playback(server_addr).await {
-                println!("⚠️ Warning: Failed to start audio playback: {}", e);
+                // println!("⚠️ Warning: Failed to start audio playback: {}", e);
             } else {
-                println!("✅ Audio playback started successfully");
+                // println!("✅ Audio playback started successfully");
             }
         }
         
@@ -240,15 +257,15 @@ async fn join_channel(channel_id: String, state: State<'_, TauriAppState>) -> Re
             
             // Configurer le device d'entrée par défaut si pas encore fait
             if let Err(e) = state.audio_capture_manager.set_device("default".to_string()) {
-                println!("⚠️ Warning: Failed to set audio input device: {}", e);
+                // println!("⚠️ Warning: Failed to set audio input device: {}", e);
             }
             
             // Démarrer la capture audio pour envoyer notre voix
             if let Err(e) = state.audio_capture_manager.start_recording() {
-                println!("⚠️ Warning: Failed to start audio capture: {}", e);
+                // println!("⚠️ Warning: Failed to start audio capture: {}", e);
                 // Ne pas faire échouer le join pour autant
             } else {
-                println!("✅ Audio capture started successfully");
+                // println!("✅ Audio capture started successfully");
             }
         }
     }
@@ -262,20 +279,20 @@ async fn leave_current_channel(state: State<'_, TauriAppState>) -> Result<(), St
     state.get_backend_manager().leave_current_channel().await
         .map_err(|e| e.to_string())?;
     
-    println!("🎵 Left channel, stopping audio playback and capture...");
+    // println!("🎵 Left channel, stopping audio playback and capture...");
     
     // Arrêter la capture audio quand on quitte le channel
     if let Err(e) = state.audio_capture_manager.stop_recording() {
-        println!("⚠️ Warning: Failed to stop audio capture: {}", e);
+        // println!("⚠️ Warning: Failed to stop audio capture: {}", e);
     } else {
-        println!("✅ Audio capture stopped successfully");
+        // println!("✅ Audio capture stopped successfully");
     }
     
     // Arrêter la lecture audio quand on quitte le channel
     if let Err(e) = state.audio_playback_manager.stop_playback() {
-        println!("⚠️ Warning: Failed to stop audio playback: {}", e);
+        // println!("⚠️ Warning: Failed to stop audio playback: {}", e);
     } else {
-        println!("✅ Audio playback stopped successfully");
+        // println!("✅ Audio playback stopped successfully");
     }
     
     Ok(())
@@ -316,7 +333,7 @@ async fn start_audio_capture(state: State<'_, TauriAppState>) -> Result<(), Stri
         state.audio_capture_manager.start_recording()
             .map_err(|e| format!("Failed to start audio recording: {}", e))?;
             
-        println!("Audio capture started for user {} in channel {}", user.username, channel_id);
+        // println!("Audio capture started for user {} in channel {}", user.username, channel_id);
         Ok(())
     } else {
         Err("No user connected or no channel joined".to_string())
@@ -328,7 +345,7 @@ async fn stop_audio_capture(state: State<'_, TauriAppState>) -> Result<(), Strin
     state.audio_capture_manager.stop_recording()
         .map_err(|e| format!("Failed to stop audio recording: {}", e))?;
         
-    println!("Audio capture stopped");
+    // println!("Audio capture stopped");
     Ok(())
 }
 

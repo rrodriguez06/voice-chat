@@ -44,7 +44,7 @@ impl AudioPlaybackManager {
 
     /// Démarre la lecture audio et l'écoute UDP
     pub async fn start_playback(&self, server_addr: std::net::SocketAddr) -> Result<()> {
-        println!("🔊 AudioPlaybackManager: Starting audio playback...");
+        // println!("🔊 AudioPlaybackManager: Starting audio playback...");
         
         if *self.is_playing.read() {
             println!("⚠️ AudioPlaybackManager: Already playing, ignoring start request");
@@ -71,7 +71,7 @@ impl AudioPlaybackManager {
         let is_playing = self.is_playing.clone();
         
         // Utiliser le client UDP existant pour l'écoute au lieu de créer un nouveau socket
-        println!("🔊 AudioPlaybackManager: Using shared UDP client for audio reception...");
+        // println!("🔊 AudioPlaybackManager: Using shared UDP client for audio reception...");
         let audio_tx_clone = audio_tx.clone();
         let user_id_clone = user_id;
         let control_rx_clone = control_rx;
@@ -105,7 +105,7 @@ impl AudioPlaybackManager {
         });
 
         *self.is_playing.write() = true;
-        println!("✅ AudioPlaybackManager: Audio playback started successfully");
+        // println!("✅ AudioPlaybackManager: Audio playback started successfully");
         Ok(())
     }
 
@@ -175,7 +175,7 @@ impl AudioPlaybackManager {
         });
 
         *self.is_playing.write() = true;
-        println!("✅ AudioPlaybackManager: Audio playback started successfully with shared socket");
+        // println!("✅ AudioPlaybackManager: Audio playback started successfully with shared socket");
         Ok(())
     }
 
@@ -186,7 +186,7 @@ impl AudioPlaybackManager {
         audio_tx: mpsc::UnboundedSender<(Vec<f32>, u32, u8)>,
         control_rx: &mut mpsc::UnboundedReceiver<bool>,
     ) -> Result<()> {
-        println!("🔊 UdpListener: Starting UDP listener for playback...");
+        // println!("🔊 UdpListener: Starting UDP listener for playback...");
         
         // Essayer de se connecter au client UDP existant pour partager le socket
         // Si ça échoue, créer un nouveau socket
