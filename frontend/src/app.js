@@ -142,41 +142,48 @@ class VoiceChatApp {
    */
   async setupTauriEventListeners() {
     try {
-      const { listen } = await import('@tauri-apps/api/event');
-      const { appWindow } = await import('@tauri-apps/api/window');
+      // Utiliser l'API Tauri globale directement
+      if (typeof window !== 'undefined' && window.__TAURI__) {
+        console.log('🔧 Setting up Tauri event listeners...');
+        
+        // Listen for backend events using the global Tauri API
+        await listen('connection-status', (event) => {
+          console.log('📡 Event: connection-status', event.payload);
+          this.handleConnectionStatusChange(event.payload);
+        });
 
-      // Listen for backend events
-      await listen('connection-status', (event) => {
-        this.handleConnectionStatusChange(event.payload);
-      });
+        await listen('channel-update', (event) => {
+          console.log('📡 Event: channel-update', event.payload);
+          this.handleChannelUpdate(event.payload);
+        });
 
-      await listen('channel-update', (event) => {
-        this.handleChannelUpdate(event.payload);
-      });
+        await listen('user-joined', (event) => {
+          console.log('📡 Event: user-joined', event.payload);
+          this.handleUserJoined(event.payload);
+        });
 
-      await listen('user-joined', (event) => {
-        this.handleUserJoined(event.payload);
-      });
+        await listen('user-left', (event) => {
+          console.log('📡 Event: user-left', event.payload);
+          this.handleUserLeft(event.payload);
+        });
 
-      await listen('user-left', (event) => {
-        this.handleUserLeft(event.payload);
-      });
+        await listen('channel_users', (event) => {
+          console.log('📡 Event: channel_users', event.payload);
+          this.handleChannelUsers(event.payload);
+        });
 
-      await listen('channel_users', (event) => {
-        this.handleChannelUsers(event.payload);
-      });
+        await listen('audio-level', (event) => {
+          console.log('📡 Event: audio-level', event.payload);
+          this.handleAudioLevel(event.payload);
+        });
 
-      await listen('audio-level', (event) => {
-        this.handleAudioLevel(event.payload);
-      });
-
-      // Handle window close
-      await appWindow.onCloseRequested(async () => {
-        await this.cleanup();
-      });
+        console.log('✅ Tauri event listeners setup complete');
+      } else {
+        console.warn('⚠️ Tauri not available (running in browser mode)');
+      }
 
     } catch (error) {
-      console.warn('Tauri events not available (running in browser mode)');
+      console.warn('⚠️ Failed to setup Tauri event listeners:', error);
     }
   }
 
@@ -449,15 +456,31 @@ class VoiceChatApp {
    * Handle user joined event
    */
   handleUserJoined(userData) {
-    console.log('User joined:', userData);
-    this.showNotification(`${userData.username} joined`, 'info');
+    console.log('✅ WebSocket Event: User joined received:', userData);
+    
+    // Créer un objet utilisateur avec les données disponibles
+    const userObject = {
+      id: userData.userId,
+      username: `User ${userData.userId.slice(0, 8)}...`, // Nom temporaire
+      channelId: userData.channelId,
+      isSpeaking: false,
+      micEnabled: true,
+      speakerEnabled: true
+    };
+    
+    console.log('📝 Created user object for UI:', userObject);
+    this.showNotification(`User ${userObject.username} joined`, 'info');
     
     // Update current channel users if needed
     if (this.appState.currentChannel && userData.channelId === this.appState.currentChannel.id) {
+      console.log('🔄 Updating channel users in UI...');
       const mainPage = this.pages.get('main');
       if (mainPage) {
-        mainPage.addUser(userData);
+        mainPage.addUser(userObject);
+        console.log('✅ User added to UI successfully');
       }
+    } else {
+      console.log('ℹ️ Event not for current channel, ignoring UI update');
     }
   }
 
@@ -465,15 +488,24 @@ class VoiceChatApp {
    * Handle user left event
    */
   handleUserLeft(userData) {
-    console.log('User left:', userData);
-    this.showNotification(`${userData.username} left`, 'info');
+    console.log('✅ WebSocket Event: User left received:', userData);
+    
+    // Trouver le nom d'utilisateur pour la notification (approximatif)
+    const username = `User ${userData.userId.slice(0, 8)}...`;
+    
+    console.log('📝 Processing user left event for UI');
+    this.showNotification(`${username} left`, 'info');
     
     // Update current channel users if needed
     if (this.appState.currentChannel && userData.channelId === this.appState.currentChannel.id) {
+      console.log('🔄 Removing user from UI...');
       const mainPage = this.pages.get('main');
       if (mainPage) {
         mainPage.removeUser(userData.userId);
+        console.log('✅ User removed from UI successfully');
       }
+    } else {
+      console.log('ℹ️ Event not for current channel, ignoring UI update');
     }
   }
 

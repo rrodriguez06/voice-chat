@@ -6,11 +6,11 @@ use axum::{
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
 use crate::{
-    models::{ClientMessage, ServerMessage, CreateUserRequest},
+    models::{ClientMessage, ServerMessage},
     services::{UserService, ChannelService, AudioService},
     Error, Result,
 };
@@ -48,8 +48,13 @@ impl WebSocketHandler {
     }
 
     async fn handle_socket(self: Arc<Self>, socket: WebSocket) {
-        let (mut sender, mut receiver) = socket.split();
+        let (sender, mut receiver) = socket.split();
+        let sender = Arc::new(Mutex::new(sender));
         let mut user_id: Option<Uuid> = None;
+        let mut broadcast_receiver: Option<broadcast::Receiver<ServerMessage>> = None;
+
+        // Clone sender for broadcast task
+        let sender_for_broadcast = sender.clone();
 
         // Handle incoming messages
         while let Some(msg) = receiver.next().await {
@@ -57,12 +62,27 @@ impl WebSocketHandler {
                 Ok(axum::extract::ws::Message::Text(text)) => {
                     match serde_json::from_str::<ClientMessage>(&text) {
                         Ok(client_msg) => {
-                            match self.handle_client_message(client_msg, &mut user_id).await {
+                            match self.handle_client_message(client_msg, &mut user_id, &mut broadcast_receiver).await {
                                 Ok(response_msg) => {
                                     if let Some(msg) = response_msg {
                                         if let Ok(msg_text) = serde_json::to_string(&msg) {
-                                            let _ = sender.send(axum::extract::ws::Message::Text(msg_text)).await;
+                                            let mut sender_guard = sender.lock().await;
+                                            let _ = sender_guard.send(axum::extract::ws::Message::Text(msg_text)).await;
                                         }
+                                    }
+                                    
+                                    // If we just authenticated and have a new receiver, start broadcast listener
+                                    if let Some(mut receiver) = broadcast_receiver.take() {
+                                        let sender_clone = sender_for_broadcast.clone();
+                                        tokio::spawn(async move {
+                                            while let Ok(broadcast_msg) = receiver.recv().await {
+                                                tracing::debug!("Forwarding broadcast message to WebSocket: {:?}", broadcast_msg);
+                                                if let Ok(msg_text) = serde_json::to_string(&broadcast_msg) {
+                                                    let mut sender_guard = sender_clone.lock().await;
+                                                    let _ = sender_guard.send(axum::extract::ws::Message::Text(msg_text)).await;
+                                                }
+                                            }
+                                        });
                                     }
                                 }
                                 Err(e) => {
@@ -71,7 +91,8 @@ impl WebSocketHandler {
                                         message: e.to_string(),
                                     };
                                     if let Ok(error_text) = serde_json::to_string(&error_msg) {
-                                        let _ = sender.send(axum::extract::ws::Message::Text(error_text)).await;
+                                        let mut sender_guard = sender.lock().await;
+                                        let _ = sender_guard.send(axum::extract::ws::Message::Text(error_text)).await;
                                     }
                                 }
                             }
@@ -82,7 +103,8 @@ impl WebSocketHandler {
                                 message: "Invalid message format".to_string(),
                             };
                             if let Ok(error_text) = serde_json::to_string(&error_msg) {
-                                let _ = sender.send(axum::extract::ws::Message::Text(error_text)).await;
+                                let mut sender_guard = sender.lock().await;
+                                let _ = sender_guard.send(axum::extract::ws::Message::Text(error_text)).await;
                             }
                         }
                     }
@@ -106,18 +128,23 @@ impl WebSocketHandler {
         &self,
         message: ClientMessage,
         user_id: &mut Option<Uuid>,
+        broadcast_receiver: &mut Option<broadcast::Receiver<ServerMessage>>,
     ) -> Result<Option<ServerMessage>> {
         match message {
             ClientMessage::Authenticate { username } => {
-                let user_response = self.user_service.create_user(CreateUserRequest { username })?;
-                let uid = user_response.id;
+                // Find existing user by username instead of creating a new one
+                let existing_user = self.user_service.get_user_by_username(&username)
+                    .map_err(|_| Error::User(format!("User '{}' not found. Please connect via HTTP first.", username)))?;
+                
+                let uid = existing_user.id;
                 *user_id = Some(uid);
 
                 // Create user-specific broadcast channel
-                let (user_sender, _) = broadcast::channel(100);
+                let (user_sender, user_receiver) = broadcast::channel(100);
                 self.connections.insert(uid, user_sender);
+                *broadcast_receiver = Some(user_receiver);
 
-                tracing::info!("User {} authenticated", uid);
+                tracing::info!("User {} ({}) authenticated via WebSocket", username, uid);
                 Ok(Some(ServerMessage::Authenticated { user_id: uid }))
             }
 
@@ -210,7 +237,10 @@ impl WebSocketHandler {
 
     async fn send_to_user(&self, user_id: Uuid, message: ServerMessage) -> Result<()> {
         if let Some(sender) = self.connections.get(&user_id) {
+            tracing::debug!("Sending message to user {}: {:?}", user_id, message);
             sender.send(message).map_err(|_| Error::Network("Failed to send message".to_string()))?;
+        } else {
+            tracing::warn!("No connection found for user {}", user_id);
         }
         Ok(())
     }
@@ -223,10 +253,15 @@ impl WebSocketHandler {
     ) -> Result<()> {
         let users = self.channel_service.get_users_in_channel(&channel_id)?;
         
+        tracing::debug!("Broadcasting to channel {}: {:?} to {} users", channel_id, message, users.len());
+        
         for user_id in users {
             if Some(user_id) != exclude_user {
                 if let Some(sender) = self.connections.get(&user_id) {
+                    tracing::debug!("Sending broadcast message to user {}", user_id);
                     let _ = sender.send(message.clone());
+                } else {
+                    tracing::warn!("No connection found for user {} in channel {}", user_id, channel_id);
                 }
             }
         }
