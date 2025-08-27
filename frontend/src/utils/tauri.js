@@ -42,10 +42,53 @@ export const tauriAPI = {
       });
       
       console.log('📡 Backend response:', result);
+      
+      // Si la connexion est réussie, démarrer aussi la connexion WebSocket
+      if (result.success) {
+        console.log('🔗 Starting WebSocket connection...');
+        const wsUrl = serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+        const websocketUrl = wsUrl.includes(':') ? 
+          wsUrl.replace(/:\d+/, ':8081/ws') : 
+          `${wsUrl}:8081/ws`;
+        
+        try {
+          await this.startWebSocket(websocketUrl);
+          console.log('✅ WebSocket connection started successfully');
+        } catch (wsError) {
+          console.warn('⚠️ WebSocket connection failed but server connection succeeded:', wsError);
+          // Continue même si WebSocket échoue
+        }
+      }
+      
       return result;
       
     } catch (error) {
       console.error('❌ Connection error:', error);
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+
+  // WebSocket connection
+  async startWebSocket(wsUrl) {
+    try {
+      console.log('🔗 Starting WebSocket connection to:', wsUrl);
+      
+      if (!isTauri) {
+        console.log('🌐 Running in web mode, simulating WebSocket...');
+        return { success: true };
+      }
+
+      console.log('📡 Calling start_websocket command...');
+      await invoke('start_websocket', { wsUrl });
+      
+      console.log('✅ WebSocket connection command completed');
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ WebSocket connection error:', error);
       return {
         success: false,
         error: error.toString()

@@ -123,11 +123,11 @@ impl WebSocketManager {
     async fn handle_server_message(message: ServerMessage, app_state: &AppState, app_handle: &Option<AppHandle>) {
         match message {
             ServerMessage::UserJoined { channel_id, user_id } => {
-                println!("✅ User {} joined channel {}", user_id, channel_id);
+                println!("✅ WebSocket: User {} joined channel {}", user_id, channel_id);
                 
                 // Envoyer l'événement au frontend JS
                 if let Some(handle) = app_handle {
-                    let _ = handle.emit("user_joined", serde_json::json!({
+                    let _ = handle.emit("user-joined", serde_json::json!({
                         "userId": user_id,
                         "channelId": channel_id
                     }));
@@ -135,11 +135,11 @@ impl WebSocketManager {
             }
             
             ServerMessage::UserLeft { channel_id, user_id } => {
-                println!("✅ User {} left channel {}", user_id, channel_id);
+                println!("✅ WebSocket: User {} left channel {}", user_id, channel_id);
                 
                 // Envoyer l'événement au frontend JS
                 if let Some(handle) = app_handle {
-                    let _ = handle.emit("user_left", serde_json::json!({
+                    let _ = handle.emit("user-left", serde_json::json!({
                         "userId": user_id,
                         "channelId": channel_id
                     }));

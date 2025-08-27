@@ -58,6 +58,32 @@ impl TauriAppState {
             ws_manager.set_app_handle(app_handle);
         }
     }
+    
+    /// Démarre la connexion WebSocket avec l'AppHandle configuré
+    pub async fn start_websocket_connection(&self, ws_url: &str, app_handle: tauri::AppHandle) -> Result<(), String> {
+        println!("🔗 Starting WebSocket connection to: {}", ws_url);
+        
+        // Créer un nouveau WebSocketManager avec l'AppHandle
+        let mut ws_manager = WebSocketManager::new(ws_url, self.app_state.clone());
+        ws_manager.set_app_handle(app_handle.clone());
+        
+        // Remplacer l'ancien WebSocketManager dans le state
+        if let Ok(mut ws_manager_guard) = self.websocket_manager.lock() {
+            *ws_manager_guard = WebSocketManager::new(ws_url, self.app_state.clone());
+            ws_manager_guard.set_app_handle(app_handle);
+        }
+        
+        // Démarrer la connexion WebSocket dans une tâche séparée
+        tokio::spawn(async move {
+            if let Err(e) = ws_manager.start().await {
+                eprintln!("❌ WebSocket connection failed: {}", e);
+            } else {
+                println!("✅ WebSocket connection established successfully");
+            }
+        });
+        
+        Ok(())
+    }
 
     /// Met à jour le BackendManager avec une nouvelle URL
     pub fn update_backend_manager(&self, url: &str) {
@@ -95,7 +121,10 @@ async fn initialize_app(app: tauri::AppHandle, state: State<'_, TauriAppState>) 
     println!("🚀 Initializing app with AppHandle...");
     
     // Configurer l'AppHandle pour les événements WebSocket
-    state.configure_app_handle(app);
+    state.configure_app_handle(app.clone());
+    
+    // Stocker l'AppHandle pour une utilisation ultérieure
+    // Note: On peut utiliser app.clone() dans connect_to_server quand on en a besoin
     
     Ok(())
 }
@@ -105,6 +134,12 @@ async fn initialize_backend(state: State<'_, TauriAppState>) -> Result<(), Strin
     // Ne rien faire ici - l'initialisation se fera lors de la connexion au serveur
     println!("Backend initialized (no auto-connection)");
     Ok(())
+}
+
+#[tauri::command]
+async fn start_websocket(app: tauri::AppHandle, ws_url: String, state: State<'_, TauriAppState>) -> Result<(), String> {
+    println!("🔗 Starting WebSocket connection from command...");
+    state.start_websocket_connection(&ws_url, app).await
 }
 
 #[tauri::command]
@@ -128,22 +163,10 @@ async fn connect_to_server(server_url: String, username: String, state: State<'_
                         // Continuer même si l'UDP échoue
                     }
                     
-                    // Démarrer la connexion WebSocket
-                    println!("🔗 Starting WebSocket connection...");
-                    let ws_url = format!("ws://{}:8081/ws", backend_host);
-                    println!("🔗 WebSocket URL: {}", ws_url);
-                    
-                    // Mettre à jour l'URL WebSocket et démarrer la connexion
-                    if let Ok(ws_manager) = state.websocket_manager.lock() {
-                        // Créer un nouveau WebSocketManager avec la bonne URL
-                        let mut new_ws_manager = WebSocketManager::new(&ws_url, state.app_state.clone());
-                        
-                        // TODO: Idéalement on devrait démarrer la connexion WebSocket ici
-                        // Pour l'instant, on log juste que c'est configuré
-                        println!("✅ WebSocket manager updated with URL: {}", ws_url);
-                    } else {
-                        eprintln!("⚠️ Warning: Failed to access WebSocket manager");
-                    }
+                    // La connexion WebSocket doit être démarrée séparément
+                    // via la commande start_websocket après cette réponse
+                    let backend_host = parsed_url.split(':').next().unwrap_or("localhost");
+                    println!("✅ Server connection successful. WebSocket can be started with: ws://{}:8081/ws", backend_host);
                     
                     // Récupérer les channels
                     let channels = state.app_state.get_channels();
@@ -415,6 +438,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             initialize_app,
             initialize_backend,
+            start_websocket,
             connect_to_server,
             connect_user,
             disconnect_user,
