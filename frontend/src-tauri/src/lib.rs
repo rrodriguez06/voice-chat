@@ -166,7 +166,8 @@ async fn connect_to_server(server_url: String, username: String, state: State<'_
                     // La connexion WebSocket doit être démarrée séparément
                     // via la commande start_websocket après cette réponse
                     let backend_host = parsed_url.split(':').next().unwrap_or("localhost");
-                    let websocket_url = format!("ws://{}:8081/ws", backend_host);
+                    // WebSocket utilise le même port que HTTP avec route /ws
+                    let websocket_url = format!("ws://{}:8080/ws", backend_host);
                     println!("✅ Server connection successful. WebSocket URL: {}", websocket_url);
                     
                     // Récupérer les channels

@@ -75,9 +75,12 @@ impl WebSocketManager {
             let auth_json = serde_json::to_string(&auth_message)
                 .context("Failed to serialize auth message")?;
             
+            println!("📤 Sending authentication message: {}", auth_json);
             ws_sender.send(Message::Text(auth_json)).await
                 .context("Failed to send authentication message")?;
+            println!("✅ Authentication message sent successfully");
         } else {
+            println!("❌ No user found in app state for WebSocket authentication");
             return Err(anyhow::anyhow!("No user found in app state for WebSocket authentication"));
         }
 
@@ -88,10 +91,12 @@ impl WebSocketManager {
             while let Some(message) = ws_receiver.next().await {
                 match message {
                     Ok(Message::Text(text)) => {
+                        println!("📥 WebSocket received message: {}", text);
                         if let Ok(server_message) = serde_json::from_str::<ServerMessage>(&text) {
+                            println!("📋 Parsed server message: {:?}", server_message);
                             Self::handle_server_message(server_message, &app_state_clone, &app_handle_clone).await;
                         } else {
-                            eprintln!("Failed to parse server message: {}", text);
+                            eprintln!("❌ Failed to parse server message: {}", text);
                         }
                     }
                     Ok(Message::Binary(_)) => {
