@@ -2,6 +2,10 @@
  * Application Router - Navigation and State Management
  */
 
+// Import Tauri functions
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+
 class VoiceChatApp {
   constructor() {
     this.currentPage = null;
