@@ -441,4 +441,27 @@ export default class MainPage {
     const audioSettingsEvent = new CustomEvent('app:audio-settings');
     document.dispatchEvent(audioSettingsEvent);
   }
+
+  /**
+   * Refresh channel data from API (called when WebSocket events are received)
+   */
+  async refreshChannelData() {
+    try {
+      console.log('🔄 MainPage: Refreshing channel data...');
+      
+      if (!this.currentChannel) {
+        console.log('ℹ️ No current channel to refresh');
+        return;
+      }
+
+      // Demander à l'app de rafraîchir la liste des channels
+      // Cela va mettre à jour les données du channel et les utilisateurs
+      const refreshEvent = new CustomEvent('app:refresh-channels');
+      document.dispatchEvent(refreshEvent);
+      
+      console.log('✅ Channel data refresh requested');
+    } catch (error) {
+      console.error('❌ Failed to refresh channel data:', error);
+    }
+  }
 }

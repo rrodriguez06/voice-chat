@@ -128,6 +128,10 @@ class VoiceChatApp {
       this.showAudioSettings();
     });
 
+    document.addEventListener('app:refresh-channels', () => {
+      this.handleRefreshChannels();
+    });
+
     // Listen for Tauri events
     this.setupTauriEventListeners();
 
@@ -159,12 +163,12 @@ class VoiceChatApp {
 
         await listen('user-joined', (event) => {
           console.log('📡 Event: user-joined', event.payload);
-          this.handleUserJoined(event.payload);
+          this.handleChannelUpdated(event.payload);
         });
 
         await listen('user-left', (event) => {
           console.log('📡 Event: user-left', event.payload);
-          this.handleUserLeft(event.payload);
+          this.handleChannelUpdated(event.payload);
         });
 
         await listen('channel_users', (event) => {
@@ -453,59 +457,24 @@ class VoiceChatApp {
   }
 
   /**
-   * Handle user joined event
+   * Handle channel updated event (generic handler for user join/leave)
    */
-  handleUserJoined(userData) {
-    console.log('✅ WebSocket Event: User joined received:', userData);
+  async handleChannelUpdated(eventData) {
+    console.log('🔄 Channel updated event received:', eventData);
     
-    // Créer un objet utilisateur avec les données disponibles
-    const userObject = {
-      id: userData.userId,
-      username: `User ${userData.userId.slice(0, 8)}...`, // Nom temporaire
-      channelId: userData.channelId,
-      isSpeaking: false,
-      micEnabled: true,
-      speakerEnabled: true
-    };
-    
-    console.log('📝 Created user object for UI:', userObject);
-    this.showNotification(`User ${userObject.username} joined`, 'info');
-    
-    // Update current channel users if needed
-    if (this.appState.currentChannel && userData.channelId === this.appState.currentChannel.id) {
-      console.log('🔄 Updating channel users in UI...');
+    // Si on est dans le channel qui a été mis à jour, on recharge ses informations
+    if (this.appState.currentChannel && eventData.channelId === this.appState.currentChannel.id) {
+      console.log('� Refreshing channel data from API...');
+      
       const mainPage = this.pages.get('main');
-      if (mainPage) {
-        mainPage.addUser(userObject);
-        console.log('✅ User added to UI successfully');
+      if (mainPage && mainPage.refreshChannelData) {
+        await mainPage.refreshChannelData();
+        console.log('✅ Channel data refreshed successfully');
+      } else {
+        console.log('ℹ️ Main page not available or no refresh method');
       }
     } else {
-      console.log('ℹ️ Event not for current channel, ignoring UI update');
-    }
-  }
-
-  /**
-   * Handle user left event
-   */
-  handleUserLeft(userData) {
-    console.log('✅ WebSocket Event: User left received:', userData);
-    
-    // Trouver le nom d'utilisateur pour la notification (approximatif)
-    const username = `User ${userData.userId.slice(0, 8)}...`;
-    
-    console.log('📝 Processing user left event for UI');
-    this.showNotification(`${username} left`, 'info');
-    
-    // Update current channel users if needed
-    if (this.appState.currentChannel && userData.channelId === this.appState.currentChannel.id) {
-      console.log('🔄 Removing user from UI...');
-      const mainPage = this.pages.get('main');
-      if (mainPage) {
-        mainPage.removeUser(userData.userId);
-        console.log('✅ User removed from UI successfully');
-      }
-    } else {
-      console.log('ℹ️ Event not for current channel, ignoring UI update');
+      console.log('ℹ️ Event not for current channel, ignoring');
     }
   }
 
@@ -739,6 +708,34 @@ class VoiceChatApp {
    */
   updateState(updates) {
     Object.assign(this.appState, updates);
+  }
+
+  /**
+   * Handle refresh channels request from MainPage
+   */
+  async handleRefreshChannels() {
+    try {
+      console.log('🔄 App: Handling refresh channels request...');
+      await this.refreshChannelsList();
+      
+      // Si on a un channel actuel, on met à jour sa vue avec les nouvelles données
+      if (this.appState.currentChannel) {
+        const updatedChannel = this.appState.channels.find(c => c.id === this.appState.currentChannel.id);
+        if (updatedChannel) {
+          console.log('📋 Updating current channel view with fresh data...');
+          this.appState.currentChannel = updatedChannel;
+          
+          const mainPage = this.pages.get('main');
+          if (mainPage) {
+            await mainPage.updateChannel(updatedChannel);
+          }
+        }
+      }
+      
+      console.log('✅ Channels refresh completed');
+    } catch (error) {
+      console.error('❌ Failed to refresh channels:', error);
+    }
   }
 
   /**
