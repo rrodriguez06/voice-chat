@@ -252,8 +252,8 @@ impl AudioUdpClient {
         channels: u8,
     ) -> Result<()> {
         // Convertir f32 vers bytes (PCM 16-bit)
-        println!("🎵 UdpClient: Converting {} f32 samples (SR: {}, CH: {})", 
-            audio_data.len(), sample_rate, channels);
+        // println!("🎵 UdpClient: Converting {} f32 samples (SR: {}, CH: {})", 
+        //     audio_data.len(), sample_rate, channels);
             
         let mut pcm_data = Vec::with_capacity(audio_data.len() * 2);
         for sample in audio_data {
@@ -261,7 +261,7 @@ impl AudioUdpClient {
             pcm_data.extend_from_slice(&sample_i16.to_le_bytes());
         }
         
-        println!("🎵 UdpClient: -> {} PCM bytes", pcm_data.len());
+        // println!("🎵 UdpClient: -> {} PCM bytes", pcm_data.len());
 
         let sequence = self.sequence.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let packet = AudioPacket::audio(

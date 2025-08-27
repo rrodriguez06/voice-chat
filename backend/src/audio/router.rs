@@ -140,7 +140,7 @@ impl AudioRouter {
         let mut packets_routed = 0_u64;
 
         // Trouver tous les utilisateurs du channel (sauf l'expéditeur)
-        println!("🔀 AudioRouter: Searching for users in channel {}", channel_id);
+        // println!("🔀 AudioRouter: Searching for users in channel {}", channel_id);
         for entry in self.user_buffers.iter() {
             let (user_id, ch_id) = entry.key();
             if *ch_id == channel_id && *user_id != from_user {
@@ -154,13 +154,13 @@ impl AudioRouter {
                 } else {
                     println!("⚠️ AudioRouter: No address found for user {} (not registered)", user_id);
                 }
-            } else if *ch_id == channel_id {
-                println!("📤 AudioRouter: Skipping sender {} (same as source)", user_id);
-            }
+            } // else if *ch_id == channel_id {
+                // println!("📤 AudioRouter: Skipping sender {} (same as source)", user_id);
+            // }
         }
         
-        println!("🔀 AudioRouter: Routing summary - Found {} destinations for {} users", 
-            destinations.len(), packets_routed);
+        // println!("🔀 AudioRouter: Routing summary - Found {} destinations for {} users", 
+        //     destinations.len(), packets_routed);
 
         // Mettre à jour les statistiques
         if let Some(mut stats) = self.stats.get_mut(&channel_id) {

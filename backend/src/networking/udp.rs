@@ -141,13 +141,13 @@ impl UdpServer {
             }
         };
 
-        println!("🎵 UdpServer: Audio packet - User: {}, Channel: {}, Type: {:?}, Seq: {}, Payload len: {}", 
-            packet.header.user_id,
-            packet.header.channel_id,
-            packet.header.packet_type,
-            packet.header.sequence,
-            packet.payload.len()
-        );
+        // println!("🎵 UdpServer: Audio packet - User: {}, Channel: {}, Type: {:?}, Seq: {}, Payload len: {}", 
+        //     packet.header.user_id,
+        //     packet.header.channel_id,
+        //     packet.header.packet_type,
+        //     packet.header.sequence,
+        //     packet.payload.len()
+        // );
 
         // Vérifier que l'utilisateur existe et est dans le bon channel
         let user_id = packet.header.user_id;
@@ -188,9 +188,9 @@ impl UdpServer {
                         tracing::error!("Failed to send loopback packet: {}", e);
                     }
                     return Ok(());
-                } else {
-                    println!("🔀 UdpServer: Normal mode - routing audio to other users in channel");
-                }
+                } // else {
+                //     println!("🔀 UdpServer: Normal mode - routing audio to other users in channel");
+                // }
 
                 // Router vers les autres utilisateurs du channel
                 if router.receive_packet(packet.clone(), from_addr) {
