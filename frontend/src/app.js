@@ -33,6 +33,11 @@ class VoiceChatApp {
     try {
       console.log('Initializing Voice Chat App...');
       
+      // Initialize Tauri app first
+      console.log('Initializing Tauri app...');
+      await invoke('initialize_app');
+      console.log('Tauri app initialized successfully');
+      
       // Import page components
       console.log('Loading components...');
       await this.loadComponents();
@@ -151,6 +156,10 @@ class VoiceChatApp {
 
       await listen('user-left', (event) => {
         this.handleUserLeft(event.payload);
+      });
+
+      await listen('channel_users', (event) => {
+        this.handleChannelUsers(event.payload);
       });
 
       await listen('audio-level', (event) => {
@@ -460,6 +469,30 @@ class VoiceChatApp {
       const mainPage = this.pages.get('main');
       if (mainPage) {
         mainPage.removeUser(userData.userId);
+      }
+    }
+  }
+
+  /**
+   * Handle channel users list
+   */
+  handleChannelUsers(data) {
+    console.log('Channel users update:', data);
+    
+    // Update current channel users if needed
+    if (this.appState.currentChannel && data.channelId === this.appState.currentChannel.id) {
+      const mainPage = this.pages.get('main');
+      if (mainPage) {
+        // Convert user IDs to user objects - for now just create minimal objects
+        const users = data.users.map(userId => ({
+          id: userId,
+          username: `User ${userId.slice(0, 8)}...`, // Temporary username
+          isSpeaking: false,
+          micEnabled: true,
+          speakerEnabled: true
+        }));
+        
+        mainPage.updateUsersList(users);
       }
     }
   }

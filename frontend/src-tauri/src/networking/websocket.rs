@@ -1,7 +1,8 @@
-use crate::state::{AppState, UserInfo};
+use crate::state::AppState;
 use anyhow::{Result, Context};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use uuid::Uuid;
 
@@ -26,37 +27,26 @@ pub enum WebSocketMessage {
 
 /// Messages WebSocket reçus du backend
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "event", content = "data")]
 pub enum ServerMessage {
-    UserJoined { 
-        user: UserInfo,
-        channel_id: Uuid 
-    },
-    UserLeft { 
-        user_id: Uuid,
-        channel_id: Uuid 
-    },
-    UserSpeaking { 
-        user_id: Uuid,
-        is_speaking: bool 
-    },
-    UserMuted { 
-        user_id: Uuid,
-        is_muted: bool 
-    },
-    ChannelUpdate { 
-        channel_id: Uuid,
-        users: Vec<UserInfo> 
-    },
-    Error { 
-        message: String 
-    },
+    Authenticated { user_id: Uuid },
+    JoinedChannel { channel_id: Uuid },
+    LeftChannel { channel_id: Uuid },
+    UserJoined { channel_id: Uuid, user_id: Uuid },
+    UserLeft { channel_id: Uuid, user_id: Uuid },
+    ChannelUsers { channel_id: Uuid, users: Vec<Uuid> },
+    UserStatusChanged { user_id: Uuid, status: String },
+    AudioStarted { channel_id: Uuid, user_id: Uuid },
+    AudioStopped { channel_id: Uuid, user_id: Uuid },
+    Error { message: String },
+    Pong,
 }
 
 /// Gestionnaire de connexion WebSocket
 pub struct WebSocketManager {
     app_state: AppState,
     ws_url: String,
+    app_handle: Option<AppHandle>,
 }
 
 impl WebSocketManager {
@@ -64,7 +54,13 @@ impl WebSocketManager {
         Self {
             app_state,
             ws_url: ws_url.to_string(),
+            app_handle: None,
         }
+    }
+
+    /// Configure l'AppHandle pour l'émission d'événements
+    pub fn set_app_handle(&mut self, app_handle: AppHandle) {
+        self.app_handle = Some(app_handle);
     }
 
     /// Démarre la connexion WebSocket
@@ -78,12 +74,13 @@ impl WebSocketManager {
 
         // Task pour recevoir les messages
         let app_state_clone = self.app_state.clone();
+        let app_handle_clone = self.app_handle.clone();
         let receive_task = tokio::spawn(async move {
             while let Some(message) = ws_receiver.next().await {
                 match message {
                     Ok(Message::Text(text)) => {
                         if let Ok(server_message) = serde_json::from_str::<ServerMessage>(&text) {
-                            Self::handle_server_message(server_message, &app_state_clone).await;
+                            Self::handle_server_message(server_message, &app_state_clone, &app_handle_clone).await;
                         } else {
                             eprintln!("Failed to parse server message: {}", text);
                         }
@@ -123,79 +120,66 @@ impl WebSocketManager {
     }
 
     /// Gère les messages reçus du serveur
-    async fn handle_server_message(message: ServerMessage, app_state: &AppState) {
+    async fn handle_server_message(message: ServerMessage, app_state: &AppState, app_handle: &Option<AppHandle>) {
         match message {
-            ServerMessage::UserJoined { user, channel_id } => {
-                println!("User {} joined channel {}", user.username, channel_id);
+            ServerMessage::UserJoined { channel_id, user_id } => {
+                println!("✅ User {} joined channel {}", user_id, channel_id);
                 
-                // Mettre à jour la liste des utilisateurs du channel
-                if let Some(current_channel) = app_state.get_current_channel() {
-                    if current_channel == channel_id {
-                        // Mettre à jour l'état du channel avec le nouvel utilisateur
-                        Self::update_channel_users(app_state, channel_id, |users| {
-                            users.push(user);
-                        });
-                    }
+                // Envoyer l'événement au frontend JS
+                if let Some(handle) = app_handle {
+                    let _ = handle.emit("user_joined", serde_json::json!({
+                        "userId": user_id,
+                        "channelId": channel_id
+                    }));
                 }
             }
             
-            ServerMessage::UserLeft { user_id, channel_id } => {
-                println!("User {} left channel {}", user_id, channel_id);
+            ServerMessage::UserLeft { channel_id, user_id } => {
+                println!("✅ User {} left channel {}", user_id, channel_id);
                 
-                // Retirer l'utilisateur de la liste
-                if let Some(current_channel) = app_state.get_current_channel() {
-                    if current_channel == channel_id {
-                        Self::update_channel_users(app_state, channel_id, |users| {
-                            users.retain(|u| u.id != user_id);
-                        });
-                    }
+                // Envoyer l'événement au frontend JS
+                if let Some(handle) = app_handle {
+                    let _ = handle.emit("user_left", serde_json::json!({
+                        "userId": user_id,
+                        "channelId": channel_id
+                    }));
                 }
             }
-            
-            ServerMessage::UserSpeaking { user_id, is_speaking } => {
-                // Mettre à jour l'état de parole de l'utilisateur
-                if let Some(current_channel) = app_state.get_current_channel() {
-                    Self::update_channel_users(app_state, current_channel, |users| {
-                        if let Some(user) = users.iter_mut().find(|u| u.id == user_id) {
-                            user.is_speaking = is_speaking;
-                        }
-                    });
-                }
-            }
-            
-            ServerMessage::UserMuted { user_id, is_muted } => {
-                // Mettre à jour l'état de mute de l'utilisateur
-                if let Some(current_channel) = app_state.get_current_channel() {
-                    Self::update_channel_users(app_state, current_channel, |users| {
-                        if let Some(user) = users.iter_mut().find(|u| u.id == user_id) {
-                            user.mic_enabled = !is_muted;
-                        }
-                    });
-                }
-            }
-            
-            ServerMessage::ChannelUpdate { channel_id, users } => {
-                // Mise à jour complète des utilisateurs du channel
-                Self::update_channel_users(app_state, channel_id, |channel_users| {
-                    *channel_users = users;
-                });
-            }
-            
-            ServerMessage::Error { message } => {
-                eprintln!("Server error: {}", message);
-            }
-        }
-    }
 
-    /// Helper pour mettre à jour les utilisateurs d'un channel
-    fn update_channel_users<F>(app_state: &AppState, channel_id: Uuid, update_fn: F)
-    where
-        F: FnOnce(&mut Vec<UserInfo>),
-    {
-        let mut channels = app_state.channels.write();
-        if let Some(channel) = channels.iter_mut().find(|c| c.id == channel_id) {
-            update_fn(&mut channel.users);
-            channel.user_count = channel.users.len();
+            ServerMessage::ChannelUsers { channel_id, users } => {
+                println!("✅ Channel {} users: {:?}", channel_id, users);
+                
+                // Envoyer la liste complète des utilisateurs au frontend JS
+                if let Some(handle) = app_handle {
+                    let _ = handle.emit("channel_users", serde_json::json!({
+                        "channelId": channel_id,
+                        "users": users
+                    }));
+                }
+            }
+
+            ServerMessage::JoinedChannel { channel_id } => {
+                println!("✅ Successfully joined channel {}", channel_id);
+                app_state.set_current_channel(Some(channel_id));
+            }
+
+            ServerMessage::LeftChannel { channel_id } => {
+                println!("✅ Successfully left channel {}", channel_id);
+                app_state.set_current_channel(None);
+            }
+
+            ServerMessage::Error { message } => {
+                println!("❌ Server error: {}", message);
+                if let Some(handle) = app_handle {
+                    let _ = handle.emit("server_error", serde_json::json!({
+                        "message": message
+                    }));
+                }
+            }
+
+            _ => {
+                println!("📨 Unhandled message: {:?}", message);
+            }
         }
     }
 

@@ -16,7 +16,7 @@ use std::sync::Arc;
 pub struct TauriAppState {
     pub app_state: AppState,
     pub backend_manager: Arc<std::sync::RwLock<Arc<BackendManager>>>,
-    pub websocket_manager: Arc<WebSocketManager>,
+    pub websocket_manager: Arc<std::sync::Mutex<WebSocketManager>>,
     pub audio_device_manager: Arc<AudioDeviceManager>,
     pub audio_capture_manager: Arc<AudioCaptureManager>,
     pub audio_playback_manager: Arc<AudioPlaybackManager>,
@@ -33,10 +33,10 @@ impl TauriAppState {
             app_state.clone()
         ))));
         
-        let websocket_manager = Arc::new(WebSocketManager::new(
+        let websocket_manager = Arc::new(std::sync::Mutex::new(WebSocketManager::new(
             "", // URL vide - sera utilisée lors de la connexion
             app_state.clone()
-        ));
+        )));
         
         let audio_device_manager = Arc::new(AudioDeviceManager::new()?);
         let audio_capture_manager = Arc::new(AudioCaptureManager::new());
@@ -50,6 +50,13 @@ impl TauriAppState {
             audio_capture_manager,
             audio_playback_manager,
         })
+    }
+
+    /// Configure l'AppHandle pour les événements WebSocket
+    pub fn configure_app_handle(&self, app_handle: tauri::AppHandle) {
+        if let Ok(mut ws_manager) = self.websocket_manager.lock() {
+            ws_manager.set_app_handle(app_handle);
+        }
     }
 
     /// Met à jour le BackendManager avec une nouvelle URL
@@ -82,6 +89,16 @@ impl TauriAppState {
 }
 
 // Commandes Tauri pour l'interface frontend
+
+#[tauri::command]
+async fn initialize_app(app: tauri::AppHandle, state: State<'_, TauriAppState>) -> Result<(), String> {
+    println!("🚀 Initializing app with AppHandle...");
+    
+    // Configurer l'AppHandle pour les événements WebSocket
+    state.configure_app_handle(app);
+    
+    Ok(())
+}
 
 #[tauri::command]
 async fn initialize_backend(state: State<'_, TauriAppState>) -> Result<(), String> {
@@ -379,6 +396,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(tauri_state)
         .invoke_handler(tauri::generate_handler![
+            initialize_app,
             initialize_backend,
             connect_to_server,
             connect_user,
