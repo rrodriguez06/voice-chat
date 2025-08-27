@@ -46,10 +46,14 @@ export const tauriAPI = {
       // Si la connexion est réussie, démarrer aussi la connexion WebSocket
       if (result.success) {
         console.log('🔗 Starting WebSocket connection...');
-        const wsUrl = serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-        const websocketUrl = wsUrl.includes(':') ? 
-          wsUrl.replace(/:\d+/, ':8081/ws') : 
-          `${wsUrl}:8081/ws`;
+        
+        // Utiliser l'URL WebSocket retournée par le backend
+        const websocketUrl = result.websocketUrl || 
+          (serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://').includes(':') ? 
+            serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace(/:\d+/, ':8081/ws') : 
+            `${serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://')}:8081/ws`);
+        
+        console.log('🔗 Using WebSocket URL:', websocketUrl);
         
         try {
           await this.startWebSocket(websocketUrl);

@@ -1,28 +1,22 @@
 use crate::state::AppState;
 use anyhow::{Result, Context};
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use uuid::Uuid;
 
-/// Messages WebSocket envoyés au backend
+/// Messages WebSocket envoyés au backend (doivent correspondre à backend/src/models/message.rs)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum WebSocketMessage {
-    JoinChannel { 
-        channel_id: Uuid, 
-        user_id: Uuid 
-    },
-    LeaveChannel { 
-        channel_id: Uuid 
-    },
-    UserSpeaking { 
-        is_speaking: bool 
-    },
-    UserMuted { 
-        is_muted: bool 
-    },
+#[serde(tag = "action", content = "payload")]
+pub enum ClientMessage {
+    Authenticate { username: String },
+    JoinChannel { channel_id: Uuid, password: Option<String> },
+    LeaveChannel { channel_id: Uuid },
+    SetStatus { status: String },
+    StartAudio { channel_id: Uuid },
+    StopAudio { channel_id: Uuid },
+    Ping,
 }
 
 /// Messages WebSocket reçus du backend
@@ -68,9 +62,24 @@ impl WebSocketManager {
         let (ws_stream, _) = connect_async(&self.ws_url).await
             .context("Failed to connect to WebSocket")?;
 
-        println!("WebSocket connected to {}", self.ws_url);
+        println!("🔗 WebSocket connected to {}", self.ws_url);
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+
+        // S'authentifier immédiatement après la connexion
+        if let Some(user) = self.app_state.get_user() {
+            println!("🔐 Authenticating WebSocket with username: {}", user.username);
+            let auth_message = ClientMessage::Authenticate { 
+                username: user.username.clone() 
+            };
+            let auth_json = serde_json::to_string(&auth_message)
+                .context("Failed to serialize auth message")?;
+            
+            ws_sender.send(Message::Text(auth_json)).await
+                .context("Failed to send authentication message")?;
+        } else {
+            return Err(anyhow::anyhow!("No user found in app state for WebSocket authentication"));
+        }
 
         // Task pour recevoir les messages
         let app_state_clone = self.app_state.clone();
@@ -109,7 +118,7 @@ impl WebSocketManager {
     }
 
     /// Envoie un message via WebSocket
-    pub async fn send_message(&self, message: WebSocketMessage) -> Result<()> {
+    pub async fn send_message(&self, message: ClientMessage) -> Result<()> {
         // Pour l'instant, cette fonction est un stub
         // Dans une vraie implémentation, on aurait une référence au sender WebSocket
         let json = serde_json::to_string(&message)
@@ -122,6 +131,11 @@ impl WebSocketManager {
     /// Gère les messages reçus du serveur
     async fn handle_server_message(message: ServerMessage, app_state: &AppState, app_handle: &Option<AppHandle>) {
         match message {
+            ServerMessage::Authenticated { user_id } => {
+                println!("✅ WebSocket: Authenticated with user ID: {}", user_id);
+                // Pas besoin d'émettre cet événement au frontend pour l'instant
+            }
+            
             ServerMessage::UserJoined { channel_id, user_id } => {
                 println!("✅ WebSocket: User {} joined channel {}", user_id, channel_id);
                 
@@ -185,32 +199,30 @@ impl WebSocketManager {
 
     /// Rejoint un channel via WebSocket
     pub async fn join_channel(&self, channel_id: Uuid) -> Result<()> {
-        if let Some(user) = self.app_state.get_user() {
-            let message = WebSocketMessage::JoinChannel {
-                channel_id,
-                user_id: user.id,
-            };
-            self.send_message(message).await
-        } else {
-            anyhow::bail!("No user connected")
-        }
+        let message = ClientMessage::JoinChannel {
+            channel_id,
+            password: None,
+        };
+        self.send_message(message).await
     }
 
     /// Quitte un channel via WebSocket
     pub async fn leave_channel(&self, channel_id: Uuid) -> Result<()> {
-        let message = WebSocketMessage::LeaveChannel { channel_id };
+        let message = ClientMessage::LeaveChannel { channel_id };
         self.send_message(message).await
     }
 
     /// Signale que l'utilisateur parle
     pub async fn set_speaking(&self, is_speaking: bool) -> Result<()> {
-        let message = WebSocketMessage::UserSpeaking { is_speaking };
+        // UserSpeaking n'existe plus dans ClientMessage, on peut utiliser SetStatus
+        let message = ClientMessage::SetStatus { status: if is_speaking { "Speaking".to_string() } else { "Idle".to_string() } };
         self.send_message(message).await
     }
 
     /// Signale que l'utilisateur est muté
     pub async fn set_muted(&self, is_muted: bool) -> Result<()> {
-        let message = WebSocketMessage::UserMuted { is_muted };
+        // UserMuted n'existe plus dans ClientMessage, on peut utiliser SetStatus
+        let message = ClientMessage::SetStatus { status: if is_muted { "Muted".to_string() } else { "Unmuted".to_string() } };
         self.send_message(message).await
     }
 }

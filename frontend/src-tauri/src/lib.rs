@@ -166,7 +166,8 @@ async fn connect_to_server(server_url: String, username: String, state: State<'_
                     // La connexion WebSocket doit être démarrée séparément
                     // via la commande start_websocket après cette réponse
                     let backend_host = parsed_url.split(':').next().unwrap_or("localhost");
-                    println!("✅ Server connection successful. WebSocket can be started with: ws://{}:8081/ws", backend_host);
+                    let websocket_url = format!("ws://{}:8081/ws", backend_host);
+                    println!("✅ Server connection successful. WebSocket URL: {}", websocket_url);
                     
                     // Récupérer les channels
                     let channels = state.app_state.get_channels();
@@ -175,7 +176,8 @@ async fn connect_to_server(server_url: String, username: String, state: State<'_
                     Ok(serde_json::json!({
                         "success": true,
                         "user": user,
-                        "channels": channels
+                        "channels": channels,
+                        "websocketUrl": websocket_url
                     }))
                 },
                 Err(e) => {
