@@ -48,15 +48,14 @@ export const tauriAPI = {
         console.log('🔗 Starting WebSocket connection...');
         
         // Utiliser l'URL WebSocket retournée par le backend
-        const websocketUrl = result.websocketUrl || 
-          (serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://').includes(':') ? 
-            serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace(/:\d+/, ':8081/ws') : 
-            `${serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://')}:8081/ws`);
+        const wsUrl = isTauri ? 
+            serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace(/:\d+/, ':8080/ws') : 
+            `${serverData.serverUrl.replace('http://', 'ws://').replace('https://', 'wss://')}:8080/ws`;
         
-        console.log('🔗 Using WebSocket URL:', websocketUrl);
+        console.log('🔗 Using WebSocket URL:', wsUrl);
         
         try {
-          await this.startWebSocket(websocketUrl);
+          await this.startWebSocket(wsUrl);
           console.log('✅ WebSocket connection started successfully');
         } catch (wsError) {
           console.warn('⚠️ WebSocket connection failed but server connection succeeded:', wsError);
@@ -116,6 +115,25 @@ export const tauriAPI = {
       return { success: true };
     } catch (error) {
       console.error('❌ Disconnection error:', error);
+      return { success: false, error: error.toString() };
+    }
+  },
+
+  // WebSocket management
+  async stopWebSocket() {
+    try {
+      console.log('🔌 Stopping WebSocket connection...');
+      
+      if (!isTauri) {
+        console.log('🌐 Running in web mode, simulating WebSocket stop...');
+        return { success: true };
+      }
+      
+      await invoke('stop_websocket');
+      console.log('✅ WebSocket connection stopped');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ WebSocket stop error:', error);
       return { success: false, error: error.toString() };
     }
   },

@@ -11,12 +11,13 @@ use tauri::{AppHandle, State, Manager, WindowEvent};
 use anyhow::Result;
 use uuid::Uuid;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// État global de l'application Tauri
 pub struct TauriAppState {
     pub app_state: AppState,
     pub backend_manager: Arc<std::sync::RwLock<Arc<BackendManager>>>,
-    pub websocket_manager: Arc<std::sync::Mutex<WebSocketManager>>,
+    pub websocket_manager: Arc<Mutex<Option<WebSocketManager>>>,
     pub audio_device_manager: Arc<AudioDeviceManager>,
     pub audio_capture_manager: Arc<AudioCaptureManager>,
     pub audio_playback_manager: Arc<AudioPlaybackManager>,
@@ -33,10 +34,7 @@ impl TauriAppState {
             app_state.clone()
         ))));
         
-        let websocket_manager = Arc::new(std::sync::Mutex::new(WebSocketManager::new(
-            "", // URL vide - sera utilisée lors de la connexion
-            app_state.clone()
-        )));
+        let websocket_manager = Arc::new(Mutex::new(None));
         
         let audio_device_manager = Arc::new(AudioDeviceManager::new()?);
         let audio_capture_manager = Arc::new(AudioCaptureManager::new());
@@ -54,35 +52,56 @@ impl TauriAppState {
 
     /// Configure l'AppHandle pour les événements WebSocket
     pub fn configure_app_handle(&self, app_handle: tauri::AppHandle) {
-        if let Ok(mut ws_manager) = self.websocket_manager.lock() {
-            ws_manager.set_app_handle(app_handle);
-        }
+        // Nous n'avons plus besoin de cette logique car nous gérons le WebSocketManager différemment
+        // Le WebSocketManager sera créé et configuré dans start_websocket_connection
     }
     
     /// Démarre la connexion WebSocket avec l'AppHandle configuré
     pub async fn start_websocket_connection(&self, ws_url: &str, app_handle: tauri::AppHandle) -> Result<(), String> {
         println!("🔗 Starting WebSocket connection to: {}", ws_url);
         
-        // Créer un nouveau WebSocketManager avec l'AppHandle
-        let mut ws_manager = WebSocketManager::new(ws_url, self.app_state.clone());
-        ws_manager.set_app_handle(app_handle.clone());
+        // Arrêter l'ancienne connexion WebSocket si elle existe
+        self.stop_websocket_connection().await;
         
-        // Remplacer l'ancien WebSocketManager dans le state
-        if let Ok(mut ws_manager_guard) = self.websocket_manager.lock() {
-            *ws_manager_guard = WebSocketManager::new(ws_url, self.app_state.clone());
-            ws_manager_guard.set_app_handle(app_handle);
-        }
+        // Créer un nouveau WebSocketManager
+        let mut ws_manager = WebSocketManager::new();
         
-        // Démarrer la connexion WebSocket dans une tâche séparée
-        tokio::spawn(async move {
-            if let Err(e) = ws_manager.start().await {
-                eprintln!("❌ WebSocket connection failed: {}", e);
-            } else {
+        // Obtenir le nom d'utilisateur depuis le state
+        let username = if let Some(user) = self.app_state.get_user() {
+            user.username.clone()
+        } else {
+            return Err("No user found in app state".to_string());
+        };
+        
+        // Démarrer la connexion WebSocket
+        match ws_manager.start(app_handle.clone(), ws_url.to_string(), username).await {
+            Ok(()) => {
                 println!("✅ WebSocket connection established successfully");
+                
+                // Stocker le manager dans le state
+                let mut guard = self.websocket_manager.lock().await;
+                *guard = Some(ws_manager);
+                
+                Ok(())
             }
-        });
+            Err(e) => {
+                eprintln!("❌ WebSocket connection failed: {}", e);
+                Err(format!("WebSocket connection failed: {}", e))
+            }
+        }
+    }
+
+    /// Arrête la connexion WebSocket
+    pub async fn stop_websocket_connection(&self) {
+        println!("🛑 Stopping WebSocket connection...");
         
-        Ok(())
+        let mut guard = self.websocket_manager.lock().await;
+        if let Some(mut ws_manager) = guard.take() {
+            let _ = ws_manager.stop().await;
+            println!("✅ WebSocket connection stopped");
+        } else {
+            println!("ℹ️ No active WebSocket connection to stop");
+        }
     }
 
     /// Met à jour le BackendManager avec une nouvelle URL
@@ -140,6 +159,13 @@ async fn initialize_backend(state: State<'_, TauriAppState>) -> Result<(), Strin
 async fn start_websocket(app: tauri::AppHandle, ws_url: String, state: State<'_, TauriAppState>) -> Result<(), String> {
     println!("🔗 Starting WebSocket connection from command...");
     state.start_websocket_connection(&ws_url, app).await
+}
+
+#[tauri::command]
+async fn stop_websocket(state: State<'_, TauriAppState>) -> Result<(), String> {
+    println!("🛑 Stopping WebSocket connection from command...");
+    state.stop_websocket_connection().await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -208,6 +234,10 @@ async fn connect_user(username: String, state: State<'_, TauriAppState>) -> Resu
 
 #[tauri::command]
 async fn disconnect_user(state: State<'_, TauriAppState>) -> Result<(), String> {
+    // Arrêter le WebSocket d'abord
+    state.stop_websocket_connection().await;
+    
+    // Puis déconnecter l'utilisateur du backend
     state.get_backend_manager().disconnect_user().await
         .map_err(|e| e.to_string())
 }
@@ -442,6 +472,7 @@ pub fn run() {
             initialize_app,
             initialize_backend,
             start_websocket,
+            stop_websocket,
             connect_to_server,
             connect_user,
             disconnect_user,
@@ -477,10 +508,16 @@ pub fn run() {
                         
                         // Cloner les éléments nécessaires pour le bloc async
                         let backend_manager = state.get_backend_manager();
-                        let window_handle = window.clone();
+                        let app_handle_clone = app_handle.clone();
                         
                         // Déconnecter en arrière-plan
                         tauri::async_runtime::spawn(async move {
+                            let state = app_handle_clone.state::<TauriAppState>();
+                            
+                            // Arrêter le WebSocket d'abord
+                            state.stop_websocket_connection().await;
+                            
+                            // Puis déconnecter l'utilisateur
                             match backend_manager.disconnect_user().await {
                                 Ok(_) => {
                                     println!("✅ User disconnected successfully, closing application");
@@ -491,7 +528,7 @@ pub fn run() {
                             }
                             
                             // Fermer l'application après la déconnexion
-                            window_handle.close().unwrap();
+                            app_handle_clone.exit(0);
                         });
                     } else {
                         println!("👤 No user connected, allowing natural close");
