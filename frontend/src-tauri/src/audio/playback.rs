@@ -70,17 +70,19 @@ impl AudioPlaybackManager {
 
         let is_playing = self.is_playing.clone();
         
-        // Démarrer l'écoute UDP dans une tâche séparée
-        println!("🔊 AudioPlaybackManager: Starting UDP listener...");
+        // Utiliser le client UDP existant pour l'écoute au lieu de créer un nouveau socket
+        println!("🔊 AudioPlaybackManager: Using shared UDP client for audio reception...");
         let audio_tx_clone = audio_tx.clone();
         let user_id_clone = user_id;
-        let mut control_rx_clone = control_rx;
+        let control_rx_clone = control_rx;
         tokio::spawn(async move {
-            if let Err(e) = Self::start_udp_listener(
+            // Ici, nous utiliserions le socket partagé du client UDP
+            // Pour l'instant, utilisons l'ancienne méthode mais avec un port différent
+            if let Err(e) = Self::start_udp_listener_fallback(
                 server_addr,
                 user_id_clone,
                 audio_tx_clone,
-                &mut control_rx_clone,
+                control_rx_clone,
             ).await {
                 eprintln!("❌ UDP listener error: {}", e);
             }
@@ -107,6 +109,76 @@ impl AudioPlaybackManager {
         Ok(())
     }
 
+    /// Démarre la lecture audio en utilisant le socket partagé du client UDP
+    pub async fn start_playback_with_shared_socket(
+        &self,
+        server_addr: std::net::SocketAddr,
+        udp_socket: Arc<tokio::net::UdpSocket>,
+    ) -> Result<()> {
+        if *self.is_playing.read() {
+            println!("⚠️ AudioPlaybackManager: Already playing, ignoring start request");
+            return Ok(());
+        }
+
+        let device_name = self.device_name.read()
+            .as_ref()
+            .context("No audio device configured")?
+            .clone();
+        println!("🔊 AudioPlaybackManager: Using device: {}", device_name);
+        println!("🔊 AudioPlaybackManager: Using shared UDP socket on {:?}", udp_socket.local_addr()?);
+
+        let user_id = self.user_id.read()
+            .context("No user ID configured")?;
+        println!("🔊 AudioPlaybackManager: User ID: {}", user_id);
+
+        // Créer un channel de contrôle
+        let (control_tx, control_rx) = mpsc::unbounded_channel::<bool>();
+        *self.control_tx.write() = Some(control_tx);
+
+        // Créer un channel pour les données audio avec métadonnées
+        let (audio_tx, audio_rx) = mpsc::unbounded_channel::<(Vec<f32>, u32, u8)>();
+
+        // Démarrer l'UDP listener avec le socket partagé
+        let audio_tx_clone = audio_tx.clone();
+        let user_id_clone = user_id;
+        let udp_socket_clone = Arc::clone(&udp_socket);
+        let control_rx_clone = control_rx;
+        tokio::spawn(async move {
+            if let Err(e) = Self::start_udp_listener_with_shared_socket(
+                server_addr,
+                user_id_clone,
+                audio_tx_clone,
+                control_rx_clone,
+                udp_socket_clone,
+            ).await {
+                eprintln!("❌ UDP listener error: {}", e);
+            }
+        });
+
+        // Créer le receiver partagé pour le thread audio
+        let is_playing = Arc::new(RwLock::new(true));
+
+        // Démarrer la lecture dans un thread système (pas une tâche async)
+        println!("🔊 AudioPlaybackManager: Starting playback task...");
+        let device_name_clone = device_name;
+        let is_playing_clone = is_playing.clone();
+        let audio_rx_moved = audio_rx;
+        
+        std::thread::spawn(move || {
+            if let Err(e) = Self::start_playback_task_sync(
+                device_name_clone,
+                is_playing_clone,
+                audio_rx_moved,
+            ) {
+                eprintln!("❌ Audio playback error: {}", e);
+            }
+        });
+
+        *self.is_playing.write() = true;
+        println!("✅ AudioPlaybackManager: Audio playback started successfully with shared socket");
+        Ok(())
+    }
+
     /// Tâche d'écoute UDP pour recevoir l'audio du backend
     async fn start_udp_listener(
         server_addr: std::net::SocketAddr,
@@ -116,10 +188,22 @@ impl AudioPlaybackManager {
     ) -> Result<()> {
         println!("🔊 UdpListener: Starting UDP listener for playback...");
         
-        // Créer le socket UDP pour écouter l'audio du backend
-        // Utiliser un port fixe pour que le backend puisse nous renvoyer les paquets
-        let socket = UdpSocket::bind("0.0.0.0:8083").await
-            .context("Failed to bind UDP socket for playback")?;
+        // Essayer de se connecter au client UDP existant pour partager le socket
+        // Si ça échoue, créer un nouveau socket
+        let socket = match UdpSocket::bind("0.0.0.0:8083").await {
+            Ok(sock) => {
+                println!("🔊 UdpListener: Successfully bound to port 8083");
+                sock
+            }
+            Err(e) => {
+                println!("⚠️ UdpListener: Failed to bind to 8083 ({}), trying alternative port...", e);
+                // Essayer un port différent si 8083 est occupé
+                let sock = UdpSocket::bind("0.0.0.0:0").await
+                    .context("Failed to bind UDP socket for playback on any port")?;
+                println!("🔊 UdpListener: Using alternative port {:?}", sock.local_addr()?);
+                sock
+            }
+        };
         
         println!("🔊 UdpListener: Listening on {:?}", socket.local_addr()?);
         
@@ -130,6 +214,7 @@ impl AudioPlaybackManager {
                 // Vérifier les commandes d'arrêt
                 cmd = control_rx.recv() => {
                     if cmd.is_none() {
+                        println!("🔊 UdpListener: Received stop command, shutting down");
                         break;
                     }
                 }
@@ -192,6 +277,146 @@ impl AudioPlaybackManager {
         println!("🔊 UdpListener: Converted {} PCM bytes -> {} f32 samples", 
             pcm_data.len(), samples.len());
         samples
+    }
+    
+    /// Fallback UDP listener avec port dynamique si 8083 est occupé
+    async fn start_udp_listener_fallback(
+        server_addr: std::net::SocketAddr,
+        user_id: Uuid,
+        audio_tx: mpsc::UnboundedSender<(Vec<f32>, u32, u8)>,
+        mut control_rx: mpsc::UnboundedReceiver<bool>,
+    ) -> Result<()> {
+        println!("🔊 UdpListener: Starting fallback UDP listener...");
+        
+        // Utiliser un port dynamique puisque 8083 est probablement occupé
+        let socket = UdpSocket::bind("0.0.0.0:0").await
+            .context("Failed to bind UDP socket for playback on any port")?;
+        
+        println!("🔊 UdpListener: Listening on {:?}", socket.local_addr()?);
+        println!("⚠️ UdpListener: WARNING - Using different port than UDP client, audio routing may not work correctly");
+        
+        let mut buf = vec![0u8; 4096];
+        
+        loop {
+            tokio::select! {
+                // Vérifier les commandes d'arrêt
+                cmd = control_rx.recv() => {
+                    if cmd.is_none() {
+                        println!("🔊 UdpListener: Received stop command, shutting down");
+                        break;
+                    }
+                }
+                // Recevoir des packets UDP
+                result = socket.recv_from(&mut buf) => {
+                    match result {
+                        Ok((size, from)) => {
+                            if from.ip() == server_addr.ip() && from.port() == server_addr.port() {
+                                // Essayer de désérialiser le packet audio
+                                if let Ok(packet) = AudioPacket::from_bytes(&buf[..size]) {
+                                    // Traiter les packets audio de type Audio
+                                    if packet.header.packet_type == PacketType::Audio {
+                                        // En mode normal, on reçoit l'audio d'autres utilisateurs
+                                        // En mode loopback, on reçoit notre propre audio
+                                        let is_own_packet = packet.header.user_id == user_id;
+                                        
+                                        println!("🔊 UdpListener: Received audio packet from user {} {} - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
+                                            packet.header.user_id, 
+                                            if is_own_packet { "(own)" } else { "(other)" },
+                                            packet.header.sequence, packet.payload.len(),
+                                            packet.header.sample_rate, packet.header.channels);
+                                        
+                                        // Convertir les bytes PCM en f32
+                                        let audio_samples = Self::pcm_to_f32(&packet.payload);
+                                        
+                                        // Envoyer vers le lecteur audio avec métadonnées pour conversion
+                                        if let Err(_) = audio_tx.send((audio_samples, packet.header.sample_rate, packet.header.channels)) {
+                                            // Channel fermé, arrêter
+                                            break;
+                                        }
+                                    } else {
+                                        println!("🔇 UdpListener: Ignoring non-audio packet type: {:?}", packet.header.packet_type);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("❌ UDP receive error: {}", e);
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                        }
+                    }
+                }
+            }
+        }
+        
+        println!("🔊 UdpListener: Stopped receiving audio packets");
+        Ok(())
+    }
+    
+    /// UDP listener utilisant un socket partagé (pas de conflit de port)
+    async fn start_udp_listener_with_shared_socket(
+        server_addr: std::net::SocketAddr,
+        user_id: Uuid,
+        audio_tx: mpsc::UnboundedSender<(Vec<f32>, u32, u8)>,
+        mut control_rx: mpsc::UnboundedReceiver<bool>,
+        udp_socket: Arc<tokio::net::UdpSocket>,
+    ) -> Result<()> {
+        println!("🔊 UdpListener: Starting UDP listener with shared socket on {:?}", udp_socket.local_addr()?);
+        
+        let mut buf = vec![0u8; 4096];
+        
+        loop {
+            tokio::select! {
+                // Vérifier les commandes d'arrêt
+                cmd = control_rx.recv() => {
+                    if cmd.is_none() {
+                        println!("🔊 UdpListener: Received stop command, shutting down");
+                        break;
+                    }
+                }
+                // Recevoir des packets UDP
+                result = udp_socket.recv_from(&mut buf) => {
+                    match result {
+                        Ok((size, from)) => {
+                            if from.ip() == server_addr.ip() && from.port() == server_addr.port() {
+                                // Essayer de désérialiser le packet audio
+                                if let Ok(packet) = AudioPacket::from_bytes(&buf[..size]) {
+                                    // Traiter les packets audio de type Audio
+                                    if packet.header.packet_type == PacketType::Audio {
+                                        // En mode normal, on reçoit l'audio d'autres utilisateurs
+                                        // En mode loopback, on reçoit notre propre audio
+                                        let is_own_packet = packet.header.user_id == user_id;
+                                        
+                                        println!("🔊 UdpListener: Received audio packet from user {} {} - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
+                                            packet.header.user_id, 
+                                            if is_own_packet { "(own)" } else { "(other)" },
+                                            packet.header.sequence, packet.payload.len(),
+                                            packet.header.sample_rate, packet.header.channels);
+                                        
+                                        // Convertir les bytes PCM en f32
+                                        let audio_samples = Self::pcm_to_f32(&packet.payload);
+                                        
+                                        // Envoyer vers le lecteur audio avec métadonnées pour conversion
+                                        if let Err(_) = audio_tx.send((audio_samples, packet.header.sample_rate, packet.header.channels)) {
+                                            // Channel fermé, arrêter
+                                            break;
+                                        }
+                                    } else {
+                                        println!("🔇 UdpListener: Ignoring non-audio packet type: {:?}", packet.header.packet_type);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("❌ UDP receive error: {}", e);
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                        }
+                    }
+                }
+            }
+        }
+        
+        println!("🔊 UdpListener: Stopped receiving audio packets (shared socket)");
+        Ok(())
     }
 
     /// Convertit l'audio d'un format source vers un format de sortie

@@ -196,11 +196,26 @@ async fn join_channel(channel_id: String, state: State<'_, TauriAppState>) -> Re
             .map_err(|e| format!("Invalid server address: {}", e))?;
         
         // Démarrer la lecture audio pour recevoir l'audio du channel
-        if let Err(e) = state.audio_playback_manager.start_playback(server_addr).await {
-            println!("⚠️ Warning: Failed to start audio playback: {}", e);
-            // Ne pas faire échouer le join pour autant
+        // Utiliser le socket partagé du client UDP si disponible
+        let udp_client_option = state.backend_manager.read().unwrap().get_udp_client();
+        if let Some(udp_client) = udp_client_option {
+            let shared_socket = udp_client.get_shared_socket();
+            if let Err(e) = state.audio_playback_manager.start_playback_with_shared_socket(server_addr, shared_socket).await {
+                println!("⚠️ Warning: Failed to start audio playback with shared socket: {}", e);
+                // Fallback vers la méthode normale
+                if let Err(e2) = state.audio_playback_manager.start_playback(server_addr).await {
+                    println!("⚠️ Warning: Failed to start audio playback (fallback): {}", e2);
+                }
+            } else {
+                println!("✅ Audio playback started successfully with shared socket");
+            }
         } else {
-            println!("✅ Audio playback started successfully");
+            // Pas de client UDP, utiliser la méthode normale
+            if let Err(e) = state.audio_playback_manager.start_playback(server_addr).await {
+                println!("⚠️ Warning: Failed to start audio playback: {}", e);
+            } else {
+                println!("✅ Audio playback started successfully");
+            }
         }
         
         // Démarrer automatiquement la capture audio après avoir rejoint le channel
@@ -311,8 +326,17 @@ async fn start_audio_playback(state: State<'_, TauriAppState>) -> Result<(), Str
         let server_addr: std::net::SocketAddr = "127.0.0.1:8082".parse()
             .map_err(|e| format!("Invalid server address: {}", e))?;
         
-        state.audio_playback_manager.start_playback(server_addr).await
-            .map_err(|e| e.to_string())
+        // Utiliser le socket partagé du client UDP si disponible
+        let udp_client_option = state.backend_manager.read().unwrap().get_udp_client();
+        if let Some(udp_client) = udp_client_option {
+            let shared_socket = udp_client.get_shared_socket();
+            state.audio_playback_manager.start_playback_with_shared_socket(server_addr, shared_socket).await
+                .map_err(|e| e.to_string())
+        } else {
+            // Pas de client UDP, utiliser la méthode normale
+            state.audio_playback_manager.start_playback(server_addr).await
+                .map_err(|e| e.to_string())
+        }
     } else {
         Err("No user connected".to_string())
     }

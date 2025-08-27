@@ -190,8 +190,21 @@ impl AudioUdpClient {
     /// Crée un nouveau client UDP audio
     pub async fn new(server_addr: SocketAddr) -> Result<Self> {
         // Utiliser le port 8083 pour que le backend puisse nous renvoyer l'audio sur le même port
-        let socket = UdpSocket::bind("0.0.0.0:8083").await
-            .context("Failed to bind UDP socket")?;
+        println!("🔗 AudioUdpClient: Attempting to bind to port 8083...");
+        let socket = match UdpSocket::bind("0.0.0.0:8083").await {
+            Ok(sock) => {
+                println!("✅ AudioUdpClient: Successfully bound to port 8083");
+                sock
+            }
+            Err(e) => {
+                println!("❌ AudioUdpClient: Failed to bind to port 8083: {}", e);
+                println!("🔗 AudioUdpClient: Trying dynamic port...");
+                let sock = UdpSocket::bind("0.0.0.0:0").await
+                    .context("Failed to bind UDP socket on any port")?;
+                println!("✅ AudioUdpClient: Bound to dynamic port {:?}", sock.local_addr()?);
+                sock
+            }
+        };
             
         Ok(Self {
             socket: Arc::new(socket),
@@ -249,6 +262,98 @@ impl AudioUdpClient {
         self.socket.local_addr()
             .context("Failed to get local socket address")
             .map_err(Into::into)
+    }
+
+    /// Obtient le socket partagé pour utilisation par d'autres composants
+    pub fn get_shared_socket(&self) -> Arc<UdpSocket> {
+        Arc::clone(&self.socket)
+    }
+
+    /// Démarre l'écoute des packets entrants sur le même socket
+    pub async fn start_receiving(
+        &self,
+        user_id: Uuid,
+        audio_tx: tokio::sync::mpsc::UnboundedSender<(Vec<f32>, u32, u8)>,
+        mut stop_rx: tokio::sync::mpsc::UnboundedReceiver<bool>,
+    ) -> Result<()> {
+        println!("🔊 UdpClient: Starting to receive audio packets...");
+        
+        let socket = Arc::clone(&self.socket);
+        let server_addr = self.server_addr;
+        let mut buf = vec![0u8; 4096];
+        
+        loop {
+            tokio::select! {
+                // Vérifier les commandes d'arrêt
+                cmd = stop_rx.recv() => {
+                    if cmd.is_none() {
+                        println!("🔊 UdpClient: Received stop command for receiving");
+                        break;
+                    }
+                }
+                // Recevoir des packets UDP
+                result = socket.recv_from(&mut buf) => {
+                    match result {
+                        Ok((size, from)) => {
+                            // Vérifier que le packet vient du serveur
+                            if from.ip() == server_addr.ip() && from.port() == server_addr.port() {
+                                // Essayer de désérialiser le packet audio
+                                if let Ok(packet) = AudioPacket::from_bytes(&buf[..size]) {
+                                    // Traiter les packets audio de type Audio
+                                    if packet.header.packet_type == PacketType::Audio {
+                                        // En mode normal, on reçoit l'audio d'autres utilisateurs
+                                        // En mode loopback, on reçoit notre propre audio
+                                        let is_own_packet = packet.header.user_id == user_id;
+                                        
+                                        println!("🔊 UdpClient: Received audio packet from user {} {} - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
+                                            packet.header.user_id, 
+                                            if is_own_packet { "(own)" } else { "(other)" },
+                                            packet.header.sequence, packet.payload.len(),
+                                            packet.header.sample_rate, packet.header.channels);
+                                        
+                                        // Convertir les bytes PCM en f32
+                                        let audio_samples = Self::pcm_to_f32(&packet.payload);
+                                        
+                                        // Envoyer vers le lecteur audio avec métadonnées pour conversion
+                                        if let Err(_) = audio_tx.send((audio_samples, packet.header.sample_rate, packet.header.channels)) {
+                                            // Channel fermé, arrêter
+                                            println!("🔊 UdpClient: Audio channel closed, stopping reception");
+                                            break;
+                                        }
+                                    } else {
+                                        println!("🔇 UdpClient: Ignoring non-audio packet type: {:?}", packet.header.packet_type);
+                                    }
+                                } else {
+                                    println!("⚠️ UdpClient: Failed to parse packet from {}", from);
+                                }
+                            } else {
+                                println!("🔇 UdpClient: Ignoring packet from unknown source: {}", from);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("❌ UdpClient receive error: {}", e);
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                        }
+                    }
+                }
+            }
+        }
+        
+        println!("🔊 UdpClient: Stopped receiving audio packets");
+        Ok(())
+    }
+
+    /// Convertit les bytes PCM en échantillons f32
+    fn pcm_to_f32(pcm_data: &[u8]) -> Vec<f32> {
+        let mut samples = Vec::with_capacity(pcm_data.len() / 2);
+        
+        for chunk in pcm_data.chunks_exact(2) {
+            let sample_i16 = i16::from_le_bytes([chunk[0], chunk[1]]);
+            let sample_f32 = sample_i16 as f32 / 32767.0;
+            samples.push(sample_f32);
+        }
+        
+        samples
     }
 }
 
