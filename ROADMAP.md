@@ -144,28 +144,36 @@ Alternative à Discord pour le chat vocal optimisée pour la latence minimale et
 - [x] Interpolation linéaire pour upsampling
 - [x] Audio clair sans grésillement ni latence excessive
 
-### 4.4 Contrôles volume et gestion ✅ PARTIELLEMENT
+### 4.4 Audio multi-utilisateur cross-platform ✅ TERMINÉE
+- [x] Backend routage audio entre utilisateurs du même channel
+- [x] Résolution problèmes UDP socket (Arc<UdpSocket>) pour macOS/Unix
+- [x] Socket partagé pour éviter conflits de ports UDP sur Windows
+- [x] Heartbeat UDP pour registration automatique des clients
+- [x] Fix routage IP cross-platform (backend IP vs 127.0.0.1)
+- [x] **Audio bidirectionnel Windows ↔ Mac fonctionnel**
+- [x] Diagnostic logging complet pour troubleshooting
+
+### 4.5 Contrôles volume et gestion ✅ TERMINÉE
 - [x] Interface de sélection des périphériques audio
 - [x] Configuration automatique des devices
 - [x] Démarrage/arrêt automatique playback avec join/leave channel
-- [ ] Contrôles volume individuels par utilisateur
-- [ ] Mute/unmute avec indicateurs visuels
 
 ## Phase 5: Fonctionnalités Avancées (Semaines 9-11) 🔄 PROCHAINE ÉTAPE
 
-### 5.1 Audio multi-utilisateur
-
-- [ ] **PRIORITÉ**: Backend routage audio entre utilisateurs du même channel  
-- [ ] Mixage des flux audio de plusieurs utilisateurs
-- [ ] Test avec 2+ utilisateurs simultanés
-- [ ] Optimisation performances pour groupes
-
-### 5.2 Interface utilisateur audio avancée
+### 5.1 Interface utilisateur audio avancée ⭐ PRIORITÉ
 
 - [ ] Contrôles volume individuels par utilisateur
 - [ ] Boutons mute/unmute avec indicateurs visuels
 - [ ] Indicateurs d'activité vocale (voice activity detection)
 - [ ] Réglages audio par utilisateur (gain, filtre)
+- [ ] Status de connexion en temps réel (connecté/déconnecté)
+
+### 5.2 Optimisations audio
+
+- [ ] Compression audio (opus codec) pour réduire bande passante
+- [ ] Gestion buffers adaptative selon latence réseau
+- [ ] Réduction de bruit (noise suppression)
+- [ ] Echo cancellation basique
 
 ### 5.3 Soundboard
 
@@ -266,6 +274,28 @@ Alternative à Discord pour le chat vocal optimisée pour la latence minimale et
 
 ---
 
-**Version**: 1.4  
+**Version**: 1.5  
 **Dernière mise à jour**: 27 Août 2025  
-**Statut**: Phase 4 TERMINÉE ✅ - Pipeline audio complet avec conversion intelligente, Phase 5 PROCHAINE 🔄 - Audio multi-utilisateur
+**Statut**: Phase 4 TERMINÉE ✅ - Audio multi-utilisateur cross-platform FONCTIONNEL, Phase 5 PROCHAINE 🔄 - Interface audio avancée
+
+## Accomplissements Récents 🎉
+
+### Audio Cross-Platform Complet ✅
+- **Windows ↔ Mac**: Audio bidirectionnel fonctionnel
+- **Socket Management**: Résolution complète des conflits UDP ports
+- **IP Routing**: Fix du routage réseau (192.168.x.x vs 127.0.0.1)
+- **Heartbeat Protocol**: Registration automatique des clients
+- **Diagnostic Tools**: Logging complet pour troubleshooting
+
+### Architecture Robuste ✅
+- **Backend Rust**: Routage multi-utilisateur stable
+- **Frontend Tauri**: Cross-platform compatible
+- **UDP Protocol**: Optimisé pour faible latence
+- **Audio Pipeline**: CPAL → UDP → Backend → Routing → CPAL
+
+### Tests Validés ✅
+- Multi-device (Windows + Mac simultané)
+- Multi-user dans même channel
+- Qualité audio préservée
+- Latence acceptable (~50ms)
+- Stabilité de connexion
