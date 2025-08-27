@@ -140,11 +140,15 @@ impl AudioPlaybackManager {
                             if from.ip() == server_addr.ip() && from.port() == server_addr.port() {
                                 // Essayer de désérialiser le packet audio
                                 if let Ok(packet) = AudioPacket::from_bytes(&buf[..size]) {
-                                    // Vérifier si c'est pour cet utilisateur (mode loopback)
-                                    if packet.header.user_id == user_id && 
-                                       packet.header.packet_type == PacketType::Audio {
+                                    // Traiter les packets audio de type Audio
+                                    if packet.header.packet_type == PacketType::Audio {
+                                        // En mode normal, on reçoit l'audio d'autres utilisateurs
+                                        // En mode loopback, on reçoit notre propre audio
+                                        let is_own_packet = packet.header.user_id == user_id;
                                         
-                                        println!("🔊 UdpListener: Received audio packet - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
+                                        println!("🔊 UdpListener: Received audio packet from user {} {} - Seq: {}, Payload: {} bytes, SR: {}Hz, CH: {}", 
+                                            packet.header.user_id, 
+                                            if is_own_packet { "(own)" } else { "(other)" },
                                             packet.header.sequence, packet.payload.len(),
                                             packet.header.sample_rate, packet.header.channels);
                                         
@@ -156,6 +160,8 @@ impl AudioPlaybackManager {
                                             // Channel fermé, arrêter
                                             break;
                                         }
+                                    } else {
+                                        println!("🔇 UdpListener: Ignoring non-audio packet type: {:?}", packet.header.packet_type);
                                     }
                                 }
                             }
